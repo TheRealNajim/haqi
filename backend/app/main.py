@@ -1,6 +1,27 @@
 """haqi backend — FastAPI surface. Golden fixtures keep it alive offline."""
 import json
+import os
 from pathlib import Path
+
+# load .env (backend/.env or repo-root .env) BEFORE any adapter/db imports read env
+# zero-dependency: plain KEY=VALUE lines, '#' comments, values may be quoted.
+def _load_env(cands: list[Path] | None = None) -> None:
+    """Plain KEY=VALUE lines, '#' comments, quoted values allowed; first hit wins.
+    setdefault: real environment always beats dotenv — no override surprises."""
+    if cands is None:
+        here = Path(__file__).resolve()
+        cands = [here.parent.parent / ".env", here.parent.parent.parent / ".env"]
+    for cand in cands:
+        if cand.exists():
+            for line in cand.read_text().splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+            break
+
+_load_env()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -21,7 +42,11 @@ FIX = Path(__file__).parent / "fixtures"
 
 def _fixture_verdict() -> Verdict | None:
     p = FIX / "today.json"
-    return Verdict(**json.loads(p.read_text())) if p.exists() else None
+    if not p.exists():
+        return None
+    v = Verdict(**json.loads(p.read_text()))
+    v.fallback = True
+    return v
 
 
 @app.exception_handler(Exception)

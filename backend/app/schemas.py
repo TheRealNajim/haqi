@@ -40,3 +40,4 @@ class Verdict(BaseModel):
     evidence: list[Evidence]
     blind_spots: list[str] = []         # sources that failed — never silent
     ledger_id: str | None = None        # Meterless H-MEM entry (wired on Day 3)
+    fallback: bool = False              # true ONLY when served from golden fixtures

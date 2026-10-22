@@ -93,16 +93,20 @@ async def why(ledger_id: str) -> dict:
     return rendered
 
 
-# (adapter class, role) — health = env-configured vs blind at config level
-ADAPTERS: list[tuple[type[BaseAdapter], str, list[str]]] = [
-    (OpenAQAdapter, "ground stations PM2.5 (+WAQI fallback)",
+# (adapter, source_type, role, envs) — health = env-configured vs config-blind.
+# Zetaris is special: config-gated + recipe-gated, wired via app.adapters.zetaris.
+ADAPTERS: list[tuple[type[BaseAdapter], str, str, list[str]]] = [
+    (OpenAQAdapter, "station", "ground stations PM2.5 (+WAQI fallback)",
      ["OPENAQ_API_KEY", "WAQI_TOKEN"]),
-    (WeatherAdapter, "wind/dispersion forecast", ["OPENWEATHER_API_KEY"]),
-    (FireAdapter, "wildfire smoke hotspots", ["NASA_FIRMS_MAP_KEY"]),
-    (PollenAdapter, "allergy load (CAMS Europe only by design)", []),
-    (AdvisoryAdapter, "govt advisory + warning news via Bright Data SERP",
+    (WeatherAdapter, "forecast", "wind/dispersion forecast",
+     ["OPENWEATHER_API_KEY"]),
+    (FireAdapter, "satellite", "wildfire smoke hotspots", ["NASA_FIRMS_MAP_KEY"]),
+    (PollenAdapter, "forecast", "allergy load (CAMS Europe only by design)", []),
+    (AdvisoryAdapter, "advisory", "govt advisory + warning news via Bright Data SERP",
      ["BRIGHTDATA_API_KEY"]),
 ]
+
+ZETARIS_ROLE = "sponsor SQL layer (Lightning tables; recipes pending infra)"
 
 
 @app.get("/sources/status")
@@ -110,19 +114,29 @@ async def sources_status() -> dict:
     """The failure-flex demo reads this: which sources are armed, which are blind."""
     import os
 
+    from app.adapters.zetaris import configured as zetaris_configured
+
     out = []
-    for cls, role, envs in ADAPTERS:
+    for cls, stype, role, envs in ADAPTERS:
         armed = bool(envs) and any(os.getenv(v) for v in envs)
         out.append({
             "adapter": cls.__name__,
-            "type": cls().source_type.value,
+            "type": cls().source_type.value if stype is None else stype,
             "role": role,
             "env_required": envs,
             "configured": armed,
         })
+    out.append({
+        "adapter": "ZetarisAdapter",
+        "type": "station",
+        "role": ZETARIS_ROLE,
+        "env_required": ["ZETARIS_REST_URL", "ZETARIS_API_KEY"],
+        "configured": zetaris_configured(),
+    })
     return {"schema_version": 1, "sources": out}
 
 
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True, "adapters": [c.__name__ for c, _, _ in ADAPTERS]}
+    return {"ok": True, "adapters": [c.__name__ for c, _, _, _ in ADAPTERS]
+            + ["ZetarisAdapter"]}

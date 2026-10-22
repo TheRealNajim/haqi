@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.agent import investigate
+from app.adapters.advisory import AdvisoryAdapter
 from app.adapters.base import BaseAdapter
 from app.adapters.fire import FireAdapter
 from app.adapters.openaq import OpenAQAdapter
@@ -99,6 +100,8 @@ ADAPTERS: list[tuple[type[BaseAdapter], str, list[str]]] = [
     (WeatherAdapter, "wind/dispersion forecast", ["OPENWEATHER_API_KEY"]),
     (FireAdapter, "wildfire smoke hotspots", ["NASA_FIRMS_MAP_KEY"]),
     (PollenAdapter, "allergy load (CAMS Europe only by design)", []),
+    (AdvisoryAdapter, "govt advisory + warning news via Bright Data SERP",
+     ["BRIGHTDATA_API_KEY"]),
 ]
 
 

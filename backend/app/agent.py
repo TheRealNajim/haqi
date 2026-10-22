@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from agent.llm import parse_question
+from app.adapters.advisory import AdvisoryAdapter
 from app.adapters.base import AdapterError, BaseAdapter
 from app.adapters.fire import FireAdapter
 from app.adapters.openaq import OpenAQAdapter
@@ -22,6 +23,7 @@ def _adapters_for(profile: Profile) -> list[BaseAdapter]:
     adapters: list[BaseAdapter] = [OpenAQAdapter(), WeatherAdapter(), FireAdapter()]
     if profile.name == "pollen_allergy":
         adapters.append(PollenAdapter())
+    adapters.append(AdvisoryAdapter())
     return adapters
 
 

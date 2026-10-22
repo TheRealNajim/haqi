@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "ledger_id": "demo-ledger-0001",
+  "logged_at": "2026-10-22T09:00:05+00:00",
+  "nodes": [
+    {
+      "id": "openaq:demo",
+      "type": "station",
+      "label": "station 3.8 km away",
+      "weight": 0.82,
+      "stale": false,
+      "finding": "PM2.5 61 \u00b5g/m\u00b3, steady",
+      "source_url": "https://openaq.org"
+    },
+    {
+      "id": "weather:demo",
+      "type": "forecast",
+      "label": "wind forecast",
+      "weight": 0.55,
+      "stale": false,
+      "finding": "breeze turns at noon, clears smoke",
+      "source_url": "https://openweathermap.org"
+    },
+    {
+      "id": "school:demo",
+      "type": "station",
+      "label": "school sensor",
+      "weight": 0.21,
+      "stale": true,
+      "finding": "read 71 this morning - old reading, counted less",
+      "source_url": null
+    }
+  ],
+  "edges": [
+    {
+      "from": "openaq:demo",
+      "to": "verdict",
+      "note": "primary reading"
+    },
+    {
+      "from": "weather:demo",
+      "to": "verdict",
+      "note": "clearing trend"
+    },
+    {
+      "from": "school:demo",
+      "to": "verdict",
+      "note": "down-weighted: stale"
+    }
+  ]
+}

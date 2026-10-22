@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "level": "be careful",
+  "window": "best after 6 pm",
+  "reason": "smoke clears when the wind turns",
+  "aqi": 88,
+  "evidence": [
+    {
+      "claim": "nearest station reads PM2.5 61 \u00b5g/m\u00b3",
+      "source_id": "openaq:demo",
+      "source_type": "station",
+      "retrieved_at": "2026-10-22T09:00:00+00:00",
+      "observed_at": "2026-10-22T08:55:00+00:00",
+      "geo_distance_km": 3.8,
+      "raw_value": 61.0,
+      "unit": "\u00b5g/m\u00b3",
+      "confidence": 0.82,
+      "staleness_flag": false,
+      "weight": 0.82
+    }
+  ],
+  "blind_spots": [],
+  "ledger_id": "demo-ledger-0001"
+}

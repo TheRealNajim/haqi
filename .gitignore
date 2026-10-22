@@ -1,0 +1,25 @@
+# secrets
+.env
+*.env
+!.env.example
+
+# agent + planning docs (never in repo)
+AGENTS.md
+QWEN.md
+CLAUDE.md
+SPEC.md
+DECISIONS.md
+QWEN_BRIEF.md
+# area AGENTS.md files ARE tracked so teammates' agents load the rules
+!frontend/AGENTS.md
+!infra/AGENTS.md
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# node
+node_modules/
+dist/

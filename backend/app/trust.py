@@ -4,6 +4,29 @@ from datetime import datetime, timezone
 from app.schemas import Evidence
 
 
+# US EPA AQI PM2.5 breakpoints: (aqi_low, aqi_high, pm25_low, pm25_high)
+_EPA_BREAKS = [
+    (0, 50, 0.0, 9.0),
+    (51, 100, 9.1, 35.4),
+    (101, 150, 35.5, 55.4),
+    (151, 200, 55.5, 125.4),
+    (201, 300, 125.5, 225.4),
+    (301, 500, 225.5, 500.4),
+]
+
+
+def pm25_from_aqi(aqi: float) -> float:
+    """Inverse of the EPA US AQI pm2.5 conversion; linear interpolation within
+    the band. Rounded to 0.1 — the interpolation itself never overstates accuracy."""
+    clamp = max(0.0, min(aqi, 500.0))
+    for lo, hi, plo, phi in _EPA_BREAKS:
+        if clamp <= hi:
+            frac = (clamp - lo) / (hi - lo)
+            est = plo + frac * (phi - plo)
+            return round(est, 1)
+    return 500.4
+
+
 def score(ev: Evidence) -> float:
     """confidence 0..1 from freshness, distance, and source type."""
     now = datetime.now(timezone.utc)
@@ -32,8 +55,17 @@ def apply_weights(evidence: list[Evidence]) -> list[Evidence]:
 
 
 def consensus(evidence: list[Evidence]) -> tuple[float, list[str]]:
-    """Weighted-mean value + conflict notes. Divergence between sources is surfaced, not hidden."""
-    vals = [(ev.raw_value, ev.weight) for ev in evidence if ev.raw_value is not None]
+    """Weighted-mean value + conflict notes. Divergence between sources is surfaced, not hidden.
+
+    Only comparable air readings (pm25 µg/m³, aqi) enter the mean — context evidence
+    like wind speed (m/s) or probabilities must never skew the AQI verdict.
+    """
+    COMPARABLE_UNITS = ("µg/m³", "aqi")
+    vals = [
+        (ev.raw_value, ev.weight)
+        for ev in evidence
+        if ev.raw_value is not None and (ev.unit in COMPARABLE_UNITS)
+    ]
     if not vals:
         return 0.0, ["no quantitative readings — verdict low confidence"]
     wsum = sum(w for _, w in vals)

@@ -7,7 +7,7 @@ from app.trust import apply_weights, consensus
 def ev(**kw):
     base = dict(
         claim="x", source_id="s", source_type=SourceType.STATION,
-        retrieved_at=datetime.now(timezone.utc),
+        retrieved_at=datetime.now(timezone.utc), unit="aqi",
     )
     base.update(kw)
     return Evidence(**base)
@@ -36,3 +36,11 @@ def test_conflict_is_surfaced_not_averaged_silently():
 def test_empty_quantitative_evidence_yields_low_confidence():
     _, conflicts = consensus([ev(raw_value=None)])
     assert conflicts
+
+
+def test_non_comparable_units_never_enter_the_mean():
+    """Wind speed in m/s must not pollute the AQI weighted mean."""
+    aqi1 = ev(raw_value=50.0)
+    wind = ev(raw_value=3.2, unit="m/s")
+    mean, _ = consensus([aqi1, wind])
+    assert abs(mean - 50.0) < 0.01, f"wind skewed the mean: {mean}"

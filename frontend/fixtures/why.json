@@ -2,15 +2,36 @@
   "schema_version": 1,
   "ledger_id": "demo-ledger-0001",
   "logged_at": "2026-10-22T09:00:05+00:00",
+  "question": "can I play outside?",
+  "decision": {
+    "level": "be careful",
+    "window": "best after 6 pm",
+    "reason": "smoke clears when the wind turns",
+    "aqi": 88
+  },
+  "blind_spots": [
+    "No wildfire satellite pass in the last 6 hours — we could not check for distant smoke."
+  ],
   "nodes": [
+    {
+      "id": "verdict",
+      "type": "verdict",
+      "label": "be careful",
+      "weight": 1.0,
+      "stale": false,
+      "finding": "smoke clears when the wind turns — best after 6 pm",
+      "source_url": null,
+      "kind": "assessment"
+    },
     {
       "id": "openaq:demo",
       "type": "station",
       "label": "station 3.8 km away",
       "weight": 0.82,
       "stale": false,
-      "finding": "PM2.5 61 \u00b5g/m\u00b3, steady",
-      "source_url": "https://openaq.org"
+      "finding": "PM2.5 61 µg/m³, steady",
+      "source_url": "https://openaq.org",
+      "kind": "observation"
     },
     {
       "id": "weather:demo",
@@ -19,7 +40,8 @@
       "weight": 0.55,
       "stale": false,
       "finding": "breeze turns at noon, clears smoke",
-      "source_url": "https://openweathermap.org"
+      "source_url": "https://openweathermap.org",
+      "kind": "forecast"
     },
     {
       "id": "school:demo",
@@ -27,8 +49,9 @@
       "label": "school sensor",
       "weight": 0.21,
       "stale": true,
-      "finding": "read 71 this morning - old reading, counted less",
-      "source_url": null
+      "finding": "read 71 this morning — old reading, counted less",
+      "source_url": null,
+      "kind": "observation"
     }
   ],
   "edges": [
@@ -40,7 +63,7 @@
     {
       "from": "weather:demo",
       "to": "verdict",
-      "note": "clearing trend"
+      "note": "clearing trend (forecast, not proven cause)"
     },
     {
       "from": "school:demo",

@@ -1,0 +1,21 @@
+.why-back {
+  margin: var(--space-3) 0 0;
+}
+
+.why-summary {
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.why-summary p {
+  margin: 0;
+}
+
+.why-summary p + p {
+  margin-top: var(--space-2);
+}
+
+.why-summary__note {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}

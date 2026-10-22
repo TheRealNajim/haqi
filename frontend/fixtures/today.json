@@ -1,24 +1,78 @@
 {
   "schema_version": 1,
+  "fallback": true,
+  "location": {
+    "name": "Ikeja, Lagos",
+    "lat": 6.6018,
+    "lon": 3.3515,
+    "note": "Illustrative demo location — not a live reading"
+  },
+  "observed_at": "2026-10-22T08:55:00+00:00",
+  "retrieved_at": "2026-10-22T09:00:00+00:00",
   "level": "be careful",
   "window": "best after 6 pm",
   "reason": "smoke clears when the wind turns",
   "aqi": 88,
+  "pollutants": [
+    {
+      "id": "pm25",
+      "label": "PM2.5",
+      "value": 61,
+      "unit": "µg/m³",
+      "kind": "observation"
+    },
+    {
+      "id": "pm10",
+      "label": "PM10",
+      "value": 94,
+      "unit": "µg/m³",
+      "kind": "observation"
+    }
+  ],
+  "recommendation": "Short outdoor play is ok if you take it easy. Save hard running for after 6 pm.",
   "evidence": [
     {
-      "claim": "nearest station reads PM2.5 61 \u00b5g/m\u00b3",
+      "claim": "nearest station reads PM2.5 61 µg/m³",
       "source_id": "openaq:demo",
       "source_type": "station",
       "retrieved_at": "2026-10-22T09:00:00+00:00",
       "observed_at": "2026-10-22T08:55:00+00:00",
       "geo_distance_km": 3.8,
       "raw_value": 61.0,
-      "unit": "\u00b5g/m\u00b3",
+      "unit": "µg/m³",
       "confidence": 0.82,
       "staleness_flag": false,
       "weight": 0.82
+    },
+    {
+      "claim": "breeze turns at noon and should clear smoke later",
+      "source_id": "weather:demo",
+      "source_type": "forecast",
+      "retrieved_at": "2026-10-22T09:00:00+00:00",
+      "observed_at": "2026-10-22T12:00:00+00:00",
+      "geo_distance_km": null,
+      "raw_value": null,
+      "unit": null,
+      "confidence": 0.55,
+      "staleness_flag": false,
+      "weight": 0.55
+    },
+    {
+      "claim": "school sensor read 71 this morning — old reading, counted less",
+      "source_id": "school:demo",
+      "source_type": "station",
+      "retrieved_at": "2026-10-22T09:00:00+00:00",
+      "observed_at": "2026-10-22T06:10:00+00:00",
+      "geo_distance_km": 1.2,
+      "raw_value": 71.0,
+      "unit": "µg/m³",
+      "confidence": 0.21,
+      "staleness_flag": true,
+      "weight": 0.21
     }
   ],
-  "blind_spots": [],
+  "blind_spots": [
+    "No wildfire satellite pass in the last 6 hours — we could not check for distant smoke."
+  ],
   "ledger_id": "demo-ledger-0001"
 }

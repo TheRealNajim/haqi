@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "suggestions": [
+    "Is it a good day to exercise outside?",
+    "Why is the air quality poor today?",
+    "What does PM2.5 mean?",
+    "How does today's air quality compare with yesterday?",
+    "Can I play football after school?"
+  ],
+  "responses": [
+    {
+      "id": "exercise",
+      "match": ["exercise", "run", "jog", "workout", "train", "sport"],
+      "question_echo": "Is it a good day to exercise outside?",
+      "verdict": {
+        "level": "be careful",
+        "window": "best after 6 pm",
+        "reason": "Air is a bit thick for hard exercise right now — keep it light until evening.",
+        "aqi": 88,
+        "small_print": "Based on PM2.5 61 µg/m³ near Ikeja (demo fixture). Hard breathing pulls more particles in."
+      }
+    },
+    {
+      "id": "why-poor",
+      "match": ["why", "poor", "bad", "smoke", "haze", "polluted"],
+      "question_echo": "Why is the air quality poor today?",
+      "verdict": {
+        "level": "be careful",
+        "window": "best after 6 pm",
+        "reason": "A nearby station sees elevated fine particles; wind should help clear smoke later.",
+        "aqi": 88,
+        "small_print": "Primary reading: PM2.5 61 µg/m³. School sensor was stale so we counted it less. Open Why? for the full chain."
+      }
+    },
+    {
+      "id": "pm25",
+      "match": ["pm2.5", "pm25", "particle", "what does"],
+      "question_echo": "What does PM2.5 mean?",
+      "verdict": {
+        "level": "be careful",
+        "window": "best after 6 pm",
+        "reason": "PM2.5 means tiny dust you cannot see — small enough to go deep into lungs.",
+        "aqi": 88,
+        "small_print": "Today's nearby reading is 61 µg/m³. Higher numbers mean more of those tiny particles."
+      }
+    },
+    {
+      "id": "compare",
+      "match": ["yesterday", "compare", "better", "worse", "vs"],
+      "question_echo": "How does today's air quality compare with yesterday?",
+      "verdict": {
+        "level": "be careful",
+        "window": "best after 6 pm",
+        "reason": "Today is a little worse than yesterday's clearer stretch — still playable if you go easy.",
+        "aqi": 88,
+        "small_print": "Demo comparison only: yesterday's fixture AQI was 54 (good to go). Today's demo AQI is 88."
+      }
+    },
+    {
+      "id": "football",
+      "match": ["football", "soccer", "play outside", "after school", "can i play"],
+      "question_echo": "Can I play football after school?",
+      "verdict": {
+        "level": "be careful",
+        "window": "best after 6 pm",
+        "reason": "Short kick-about is fine — save the full match for after 6 pm when wind clears smoke.",
+        "aqi": 88,
+        "small_print": "Persona tip (asthma-friendly demo): exertion raises how much air you breathe in."
+      }
+    }
+  ],
+  "fallback": {
+    "level": "be careful",
+    "window": "best after 6 pm",
+    "reason": "I do not have a special answer for that yet — today's overall call is still be careful.",
+    "aqi": 88,
+    "small_print": "Demo mode: only fixture questions get tailored replies. No live AI or backend was called."
+  }
+}

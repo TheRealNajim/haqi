@@ -7,6 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.adapters.base import AdapterError, BaseAdapter
 from app.schemas import Evidence, SourceType
+from app.trust import pm25_from_aqi
 
 OPENAQ_URL = "https://api.openaq.org/v3/locations"
 WAQI_URL = "https://api.waqi.info/feed/geo:{lat};{lon}/"
@@ -87,14 +88,16 @@ class OpenAQAdapter(BaseAdapter):
             aqi = data.get("aqi")
             if aqi is None:
                 raise AdapterError("waqi: empty aqi")
+            aqi = float(aqi)
+            pm25 = pm25_from_aqi(aqi)  # US AQI is a scale, not a mass — normalize
             return [Evidence(
-                claim=f"city AQI {aqi}",
+                claim=f"city AQI {aqi:.0f} (~{pm25:.0f} µg/m³ PM2.5-equivalent)",
                 source_id="waqi:geo",
                 source_type=SourceType.STATION,
                 retrieved_at=now,
                 observed_at=now,
-                raw_value=float(aqi),
-                unit="aqi",
+                raw_value=pm25,
+                unit="µg/m³",
             )]
         except Exception as e:
             raise AdapterError(f"station adapters failed: {e}") from e

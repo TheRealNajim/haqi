@@ -34,12 +34,16 @@ answers, it just says what it could not see. Health probe: `/health`.
 | `WAQI_TOKEN` | waqi.info | ground stations fallback |
 | `OPENWEATHER_API_KEY` | openweathermap.org | wind/dispersion |
 | `NASA_FIRMS_MAP_KEY` | firms.modaps.eosdis.nasa.gov | wildfire smoke |
+| `BRIGHTDATA_API_KEY` | Bright Data SERP zone | govt advisories / warning news |
+| `BRIGHTDATA_SERP_ZONE` | Bright Data zone settings | zone name (default `serp_api1`) |
+| `HAQI_LOCATION_NAME` | local config | city name for advisory search (default `Delhi NCR`) |
 | `ZETARIS_REST_URL` | sponsor platform | SQL over structured env data |
 | `ZETARIS_ORG_ID` | sponsor platform | ditto |
 | `ZETARIS_API_KEY` | sponsor platform | ditto |
 | `MODEL_BASE_URL` | Meterless or build.nvidia.com | agent reasoning route |
 | `MODEL_API_KEY` | same route as above | ditto |
 | `NEMOTRON_MODEL` | same route as above | ditto |
+| `HAQI_DATA_DIR` | local config | trust-ledger directory (default `backend/data/`, gitignored) |
 
 Every missing source degrades gracefully: the verdict lists the blind spot in
 plain words instead of guessing.

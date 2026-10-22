@@ -42,8 +42,8 @@ async def never_500_empty(request: Request, exc: Exception) -> JSONResponse:
 
 
 @app.get("/today")
-async def today(lat: float = 28.61, lon: float = 77.21) -> Verdict:
-    """Delhi NCR pilot coords by default. Persona default = asthma (Aman)."""
+async def today(lat: float = 6.5244, lon: float = 3.3792) -> Verdict:
+    """Lagos pilot coords by default. Persona default = asthma (Chidi)."""
     try:
         return await investigate(lat, lon)
     except Exception:

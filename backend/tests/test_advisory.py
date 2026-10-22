@@ -8,18 +8,18 @@ from app.adapters.base import AdapterError
 from app.schemas import SourceType
 
 ORGANIC = [
-    {"title": "Delhi bans construction under GRAP stage III as smog deepens",
-     "description": "The commission orders strict curbs as air turns toxic.",
-     "link": "https://example.org/grap", "source": "TNN"},
-    {"title": "Best pizza corners in Connaught Place",
+    {"title": "Lagos bans open burning as harmattan haze thickens",
+     "description": "LASEPA orders strict curbs as air turns toxic.",
+     "link": "https://example.org/lasepa", "source": "LASEPA"},
+    {"title": "Best suya spots in Victoria Island",
      "description": "Where to eat tonight.", "link": "https://example.org/x",
      "source": "foo"},
-    {"title": "Health ministry issues air alert for asthma patients",
+    {"title": "LASEPA issues air alert for asthma patients",
      "description": "Advisory says stay indoors.", "link": "https://example.org/y",
-     "source": "PIB"},
-    {"title": "NGT slams stubble burning as pollution peaks",
-     "description": "Agrim probe ordered.", "link": "https://example.org/z",
-     "source": "LT"},
+     "source": "LASEPA"},
+    {"title": "NESREA probes open burning as pollution peaks",
+     "description": "Fines ordered.", "link": "https://example.org/z",
+     "source": "NESREA"},
 ]
 
 
@@ -29,7 +29,7 @@ def _payload() -> dict:
 
 def test_filters_non_advisory_and_caps():
     evs = AdvisoryAdapter()._to_evidence(_payload())
-    assert [e.claim[:12] for e in evs] == ["Delhi bans c", "Health minis", "NGT slams st"]
+    assert [e.claim[:12] for e in evs] == ["Lagos bans o", "LASEPA issue", "NESREA probe"]
     assert all(e.source_type == SourceType.ADVISORY for e in evs)
     assert all(e.raw_value is None and e.unit is None for e in evs)
     assert all(e.confidence == 0.5 for e in evs)
@@ -37,7 +37,7 @@ def test_filters_non_advisory_and_caps():
 
 def test_source_id_gets_site_suffix():
     evs = AdvisoryAdapter()._to_evidence(_payload())
-    assert evs[0].source_id.startswith("brd:advisory_tnn")
+    assert evs[0].source_id.startswith("brd:advisory_lasepa")
 
 
 def test_claim_is_trimmed():

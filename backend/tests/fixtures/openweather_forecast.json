@@ -1,7 +1,7 @@
 {
   "cod": "200",
   "cnt": 2,
-  "city": {"id": 1273293, "name": "Delhi", "coord": {"lat": 28.61, "lon": 77.21}, "country": "IN"},
+  "city": {"id": 2332459, "name": "Lagos", "coord": {"lat": 6.45506, "lon": 3.39418}, "country": "NG"},
   "list": [
     {
       "dt_txt": "2026-10-22 12:00:00",

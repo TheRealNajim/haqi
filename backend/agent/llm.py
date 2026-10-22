@@ -9,23 +9,37 @@ import os
 import re
 from datetime import datetime, timedelta
 
-_MODEL = os.getenv("NEMOTRON_MODEL", "")
 _client = None
-if os.getenv("MODEL_BASE_URL") and os.getenv("MODEL_API_KEY") and _MODEL:
-    from openai import OpenAI
 
-    _client = OpenAI(
-        base_url=os.environ["MODEL_BASE_URL"], api_key=os.environ["MODEL_API_KEY"]
-    )
 
-LLM_ENABLED = _client is not None
+def _get_client():
+    """Lazy init — env may be loaded (dotenv) AFTER this module is imported."""
+    global _client
+    if _client is None:
+        base, key, model = (
+            os.getenv("MODEL_BASE_URL"),
+            os.getenv("MODEL_API_KEY"),
+            os.getenv("NEMOTRON_MODEL"),
+        )
+        if base and key and model:
+            from openai import OpenAI
+
+            _client = OpenAI(base_url=base, api_key=key)
+    return _client
+
+
+def _model_name() -> str:
+    return os.getenv("NEMOTRON_MODEL", "")
 
 
 def chat(system: str, user: str, tools: list | None = None) -> str:
-    if not LLM_ENABLED:
+    client = _get_client()
+    if client is None:
         raise RuntimeError("MODEL_* env not set — Nemotron path disabled")
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-    reply = _client.chat.completions.create(model=_MODEL, messages=messages, tools=tools)
+    reply = client.chat.completions.create(
+        model=_model_name(), messages=messages, tools=tools
+    )
     msg = reply.choices[0].message
     if msg.tool_calls:
         return json.dumps(
@@ -46,7 +60,7 @@ _TIME_RE = re.compile(r"(\d{1,2})([:.]?)(\d{2})?\s*(am|pm)?", re.I)
 
 def parse_question(question: str) -> dict:
     """PARSE step. Nemotron when configured; deterministic fallback otherwise."""
-    if LLM_ENABLED:
+    if _get_client() is not None:
         try:
             out = chat(
                 "Extract {activity, time_hh, time_desc} from this kid question. "
@@ -67,12 +81,27 @@ def parse_question(question: str) -> dict:
     m = _TIME_RE.search(q)
     now = datetime.now()
     if m:
-        hh = min(int(m.group(1)), 23)
-        if m.group(3):
-            hh = min(hh, 23)
+        hh = int(m.group(1))
+        mm = int(m.group(3)) if m.group(3) else None
+        if hh > 23 or (mm is not None and mm > 59):
+            m = None  # "at 27 o'clock" is not a time we can infer
+    if m:
+        hh, mm = int(m.group(1)), int(m.group(3)) if m.group(3) else 0
         if m.group(4):
             hh = hh % 12 + (12 if m.group(4).lower() == "pm" else 0)
-        window_dt = now.replace(hour=hh, minute=0, second=0, microsecond=0)
+        elif hh <= 9:
+            # bare hour with no am/pm: kids mean the afternoon slot first —
+            # "4" is 4pm if that is still ahead, else tomorrow 4pm
+            hh_pm = (hh % 12) + 12 if hh % 12 else 12
+            cand = now.replace(hour=hh_pm, minute=0, second=0, microsecond=0)
+            if cand <= now:
+                cand += timedelta(days=1)
+            return {
+                "activity": activity,
+                "time_hh": cand.hour,
+                "time_desc": cand.strftime("%I%p").lstrip("0").lower(),
+            }
+        window_dt = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
         if window_dt < now:
             window_dt += timedelta(days=1)
     else:

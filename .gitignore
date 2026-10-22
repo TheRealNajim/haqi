@@ -20,6 +20,10 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# runtime state (trust ledger receipts live on disk, not in git)
+backend/data/
+
+
 # node
 node_modules/
 dist/

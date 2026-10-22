@@ -20,7 +20,7 @@ infra/      deployment + sponsor-platform setup notes
 cd backend
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/uvicorn app.main:app --reload
-# GET http://localhost:8000/today?lat=28.61&lon=77.21
+# GET http://localhost:8000/today?lat=6.5244&lon=3.3792
 ```
 
 With no keys set, `/today` falls back to the golden fixture — the service still
@@ -36,7 +36,7 @@ answers, it just says what it could not see. Health probe: `/health`.
 | `NASA_FIRMS_MAP_KEY` | firms.modaps.eosdis.nasa.gov | wildfire smoke |
 | `BRIGHTDATA_API_KEY` | Bright Data SERP zone | govt advisories / warning news |
 | `BRIGHTDATA_SERP_ZONE` | Bright Data zone settings | zone name (default `serp_api1`) |
-| `HAQI_LOCATION_NAME` | local config | city name for advisory search (default `Delhi NCR`) |
+| `HAQI_LOCATION_NAME` | local config | city name for advisory search (default `Lagos`) |
 | `ZETARIS_REST_URL` | sponsor platform | SQL over structured env data |
 | `ZETARIS_ORG_ID` | sponsor platform | ditto |
 | `ZETARIS_API_KEY` | sponsor platform | ditto |

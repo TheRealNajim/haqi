@@ -37,7 +37,7 @@ class AdvisoryAdapter(BaseAdapter):
     def __init__(self, location_name: str | None = None) -> None:
         self.api_key = os.getenv("BRIGHTDATA_API_KEY", "")
         self.zone = os.getenv("BRIGHTDATA_SERP_ZONE", "serp_api1")
-        self.location_name = location_name or os.getenv("HAQI_LOCATION_NAME", "Delhi NCR")
+        self.location_name = location_name or os.getenv("HAQI_LOCATION_NAME", "Lagos")
 
     def _search_url(self, lat: float, lon: float) -> str:
         q = f"{self.location_name} air quality advisory warning health"

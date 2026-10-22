@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "ledger_id": "ledger-fixturedemo",
+  "logged_at": "2026-10-22T09:06:00+00:00",
+  "question": "football after school?",
+  "decision": {
+    "level": "be careful",
+    "window": "best after 6 pm",
+    "reason": "haze hangs around till the sea breeze picks up — keep it light, Chidi",
+    "aqi": 88
+  },
+  "blind_spots": [],
+  "nodes": [
+    {
+      "id": "openaq:demo",
+      "type": "station",
+      "label": "demo",
+      "weight": 0.82,
+      "stale": false,
+      "finding": "61.0 µg/m³",
+      "source_url": ""
+    },
+    {
+      "id": "brd:advisory_lasepa",
+      "type": "advisory",
+      "label": "advisory_lasepa",
+      "weight": 1.0,
+      "stale": false,
+      "finding": "no reading",
+      "source_url": ""
+    },
+    {
+      "id": "verdict",
+      "type": "verdict",
+      "label": "be careful",
+      "weight": 1.0,
+      "stale": false,
+      "finding": "haze hangs around till the sea breeze picks up — keep it light, Chidi",
+      "source_url": ""
+    }
+  ],
+  "edges": [
+    {"from": "openaq:demo", "to": "verdict", "note": "weighted finding"},
+    {"from": "brd:advisory_lasepa", "to": "verdict", "note": "weighted finding"}
+  ]
+}

@@ -1,7 +1,8 @@
 {
+  "schema_version": 1,
   "level": "be careful",
   "window": "best after 6 pm",
-  "reason": "smoke clears when the wind turns",
+  "reason": "haze hangs around till the sea breeze picks up — keep it light, Chidi",
   "aqi": 88,
   "evidence": [
     {
@@ -16,6 +17,19 @@
       "confidence": 0.82,
       "staleness_flag": false,
       "weight": 0.82
+    },
+    {
+      "claim": "LASEPA warns of open-burning smoke in Ikeja district",
+      "source_id": "brd:advisory_lasepa",
+      "source_type": "advisory",
+      "retrieved_at": "2026-10-22T09:05:00+00:00",
+      "observed_at": "2026-10-22T09:05:00+00:00",
+      "geo_distance_km": null,
+      "raw_value": null,
+      "unit": null,
+      "confidence": 0.5,
+      "staleness_flag": false,
+      "weight": 1.0
     }
   ],
   "blind_spots": [],

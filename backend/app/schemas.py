@@ -32,6 +32,7 @@ class Evidence(BaseModel):
 
 
 class Verdict(BaseModel):
+    schema_version: int = 1                 # CONTRACTS.md: every payload carries it
     level: VerdictLevel
     window: str                         # e.g. "now until 5 pm"
     reason: str                         # one sentence, kid-readable

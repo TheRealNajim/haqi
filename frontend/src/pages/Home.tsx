@@ -1,17 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
-  Search,
-  ChevronDown,
-  Bell,
   Share2,
-  Download,
-  LayoutGrid,
+  Eye,
   Map as MapIcon,
-  Box,
-  BellRing,
-  ChartColumn,
-  NotebookText,
+  MessageCircle,
+  BadgeQuestionMark,
   Database,
   Settings,
   X,
@@ -21,74 +15,15 @@ import {
   Droplet,
   Thermometer,
   ArrowUp,
+  type LucideIcon,
 } from "lucide-react";
 import worldMap from "@/assets/world-map.jpg";
 import miniMap from "@/assets/mini-map.jpg";
-import avatar from "@/assets/avatar.jpg";
-
-const K = 1.15;
-const W = Math.round(1920 * K);
-const H = Math.round(1321 * K);
+import { AppHeader, type HeaderFilterKey } from "@/components/AppHeader";
+import { Dropdown } from "@/components/Dropdown";
+import { H, K, W, canvasPosition } from "@/lib/canvas";
 
 /* ---------- small building blocks ---------- */
-
-function Dropdown({
-  options,
-  value,
-  onChange,
-  muted,
-  className = "",
-  small,
-}: {
-  options: string[];
-  value: string;
-  onChange: (v: string) => void;
-  muted?: boolean;
-  className?: string;
-  small?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-  return (
-    <div ref={ref} className={`relative ${className}`}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={`flex h-full w-full items-center justify-between gap-2 rounded-[10px] bg-surface ${
-          small ? "px-3 text-[14px]" : "px-5 text-[18px]"
-        } ${muted ? "text-ink-faint" : "text-ink"}`}
-      >
-        <span className="whitespace-nowrap">{value}</span>
-        <ChevronDown className={small ? "size-3.5" : "size-4"} strokeWidth={1.5} />
-      </button>
-      {open && (
-        <ul className="absolute left-0 top-full z-50 mt-1 min-w-full overflow-hidden rounded-[10px] bg-surface py-1 shadow-[var(--shadow-soft)]">
-          {options.map((o) => (
-            <li key={o}>
-              <button
-                onClick={() => {
-                  onChange(o);
-                  setOpen(false);
-                }}
-                className={`block w-full whitespace-nowrap px-4 py-2 text-left text-[15px] hover:bg-canvas ${
-                  o === value ? "text-ink" : "text-ink-soft"
-                }`}
-              >
-                {o}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 function Pin({ n, x, y, onClick }: { n: number; x: number; y: number; onClick: () => void }) {
   return (
@@ -207,33 +142,35 @@ const REGIONS = [
   { name: "South America", level: "Moderate", score: 40 },
 ];
 
-const NAV = [
-  { icon: LayoutGrid, label: "Dashboard" },
-  { icon: MapIcon, label: "Risk Map" },
-  { icon: Box, label: "Assets" },
-  { icon: BellRing, label: "Alerts" },
-  { icon: ChartColumn, label: "Reports" },
-  { icon: NotebookText, label: "Notes" },
+const NAV: { icon: LucideIcon; label: string; filled?: boolean }[] = [
+  // Today keeps the icon and filled look the old active "Risk Map" item had.
+  { icon: MapIcon, label: "Today", filled: true },
+  { icon: MessageCircle, label: "Ask" },
+  { icon: BadgeQuestionMark, label: "Why" },
 ];
+
+// The page must paint at its final size: the first render is measured here so
+// the canvas never appears oversized and then shrinks on refresh.
+const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth || 1;
 
 export function HomePage() {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [desktop, setDesktop] = useState(true);
+  const [scale, setScale] = useState(() => viewportWidth() / W);
+  const [desktop, setDesktop] = useState(() => window.innerWidth >= 1100);
   const [region, setRegion] = useState("All Regions");
   const [assets, setAssets] = useState("All Assets");
   const [riskType, setRiskType] = useState("All Risk Type");
   const [period, setPeriod] = useState("Last 30 Days");
   const [months, setMonths] = useState("12 months");
-  const [nav, setNav] = useState(1);
+  const [nav, setNav] = useState(0);
+  const [navHover, setNavHover] = useState<{ label: string; top: number } | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
-  const [notif, setNotif] = useState(false);
   const [sortDesc, setSortDesc] = useState(false);
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const update = () => {
-      const w = wrapRef.current?.clientWidth ?? window.innerWidth;
+      const w = wrapRef.current?.clientWidth || viewportWidth();
       setDesktop(window.innerWidth >= 1100);
       setScale(w / W);
     };
@@ -245,6 +182,13 @@ export function HomePage() {
   const regions = REGIONS.filter((r) => r.name.toLowerCase().includes(query.toLowerCase()));
   const sorted = sortDesc ? [...regions].sort((a, b) => b.score - a.score) : regions;
 
+  const setFilter = (key: HeaderFilterKey, value: string) => {
+    if (key === "region") setRegion(value);
+    else if (key === "assets") setAssets(value);
+    else if (key === "riskType") setRiskType(value);
+    else setPeriod(value);
+  };
+
   const share = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -253,21 +197,9 @@ export function HomePage() {
       toast("Couldn't copy the link");
     }
   };
-  const exportCsv = () => {
-    const csv =
-      "Region,Level,Average Risk Score\n" +
-      REGIONS.map((r) => `${r.name},${r.level},${r.score}/100`).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "world-risk-map.csv";
-    a.click();
-  };
 
   // On desktop every block is positioned on the 1920×1321 reference canvas.
-  const pos = (l: number, t: number, w: number, h: number) =>
-    desktop
-      ? { position: "absolute" as const, left: l * K, top: t * K, width: w * K, height: h * K }
-      : undefined;
+  const pos = (l: number, t: number, w: number, h: number) => canvasPosition(desktop, l, t, w, h);
 
   const content = (
     <>
@@ -289,91 +221,13 @@ export function HomePage() {
         />
       )}
 
-      {/* Logo */}
-      <div style={pos(28, 30, 42, 46)} className="text-ink">
-        <svg viewBox="0 0 42 46" className="size-[42px]" fill="currentColor">
-          <circle cx="8" cy="8" r="5" />
-          <circle cx="24" cy="6" r="5.5" />
-          <circle cx="36" cy="16" r="5" />
-          <circle cx="18" cy="20" r="6" />
-          <circle cx="6" cy="28" r="5" />
-          <circle cx="30" cy="30" r="5.5" />
-          <circle cx="16" cy="38" r="5" />
-        </svg>
-      </div>
-
-      {/* Header */}
-      <div className={desktop ? "contents" : "flex flex-wrap gap-2"}>
-        <label
-          style={pos(389, 31, 618, 64)}
-          className={`flex items-center gap-4 rounded-[10px] bg-surface px-5 ${desktop ? "" : "h-14 w-full"}`}
-        >
-          <Search className="size-7 text-ink" strokeWidth={1.4} />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
-            className="w-full bg-transparent text-[18px] text-ink placeholder:text-ink outline-none"
-          />
-        </label>
-        <div style={pos(1014, 31, 152, 64)} className={desktop ? "" : "h-12"}>
-          <Dropdown
-            className="h-full"
-            value={region}
-            onChange={setRegion}
-            options={["All Regions", "Europe", "Africa", "Asia", "Middle East", "Americas"]}
-          />
-        </div>
-        <div style={pos(1172, 31, 146, 64)} className={desktop ? "" : "h-12"}>
-          <Dropdown
-            className="h-full"
-            value={assets}
-            onChange={setAssets}
-            options={["All Assets", "Facilities", "Suppliers", "Warehouses"]}
-          />
-        </div>
-        <div style={pos(1325, 31, 170, 64)} className={desktop ? "" : "h-12"}>
-          <Dropdown
-            className="h-full"
-            muted
-            value={riskType}
-            onChange={setRiskType}
-            options={["All Risk Type", "Wildfire", "Flood", "Water Stress", "Extreme Heat"]}
-          />
-        </div>
-        <div style={pos(1502, 31, 174, 64)} className={desktop ? "" : "h-12"}>
-          <Dropdown
-            className="h-full"
-            muted
-            value={period}
-            onChange={setPeriod}
-            options={["Last 7 Days", "Last 30 Days", "Last 90 Days", "Last 12 Months"]}
-          />
-        </div>
-        <div style={pos(1756, 31, 62, 64)} className={`relative ${desktop ? "" : "h-12 w-12"}`}>
-          <button
-            onClick={() => setNotif((v) => !v)}
-            aria-label="Notifications"
-            className="relative flex h-full w-full items-center justify-center rounded-[10px] bg-surface text-ink"
-          >
-            <Bell className="size-6" strokeWidth={1.4} />
-            <span className="absolute right-[18px] top-[15px] size-2.5 rounded-full bg-risk-red" />
-          </button>
-          {notif && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-[12px] bg-surface p-4 text-[14px] text-ink-soft shadow-[var(--shadow-soft)]">
-              Flood risk increased in Egypt Operations.
-            </div>
-          )}
-        </div>
-        <img
-          src={avatar}
-          alt="Your profile"
-          width={64}
-          height={64}
-          style={pos(1824, 31, 64, 64)}
-          className={`rounded-[10px] object-cover ${desktop ? "" : "size-12"}`}
-        />
-      </div>
+      <AppHeader
+        desktop={desktop}
+        query={query}
+        onQueryChange={setQuery}
+        filters={{ region, assets, riskType, period }}
+        onFilterChange={setFilter}
+      />
 
       {/* Sidebar */}
       {desktop && (
@@ -383,8 +237,16 @@ export function HomePage() {
               key={n.label}
               aria-label={n.label}
               onClick={() => setNav(i)}
+              onMouseMove={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setNavHover({
+                  label: n.label,
+                  top: (127 + i * 69) * K + (e.clientY - r.top) / scale - 14 * K,
+                });
+              }}
+              onMouseLeave={() => setNavHover(null)}
               style={pos(29, 127 + i * 69, 64, 64)}
-              className="flex items-center justify-center rounded-[10px] bg-surface text-ink"
+              className="flex cursor-pointer items-center justify-center rounded-[10px] bg-surface text-ink"
             >
               {nav === i && (
                 <span className="absolute -left-[3px] top-[10px] h-[44px] w-[2px] rounded bg-ink" />
@@ -392,10 +254,23 @@ export function HomePage() {
               <n.icon
                 className="size-[26px]"
                 strokeWidth={nav === i ? 2.4 : 1.4}
-                fill={nav === i && i === 1 ? "currentColor" : "none"}
+                fill={nav === i && n.filled ? "currentColor" : "none"}
               />
             </button>
           ))}
+          {navHover && (
+            <div
+              role="tooltip"
+              style={{
+                left: 107 * K,
+                top: navHover.top,
+              }}
+              className="pointer-events-none absolute z-50 whitespace-nowrap rounded-[8px] bg-ink px-2.5 py-1.5 text-[13px] leading-none text-surface shadow-[var(--shadow-soft)]"
+            >
+              <span className="absolute -left-1 top-1/2 size-2 -translate-y-1/2 rotate-45 rounded-[2px] bg-ink" />
+              {navHover.label}
+            </div>
+          )}
           <button
             aria-label="Data"
             style={pos(29, 1160, 64, 64)}
@@ -424,17 +299,16 @@ export function HomePage() {
       </div>
       <button
         onClick={share}
-        style={pos(1619, 133, 116, 64)}
-        className={`flex items-center justify-center gap-2 rounded-[10px] bg-surface text-[18px] text-ink ${desktop ? "" : "h-12 px-5"}`}
+        style={pos(1592, 141, 116, 48)}
+        className={`flex items-center justify-center gap-2 rounded-[10px] bg-surface text-[18px] text-ink ${desktop ? "" : "h-10 px-5"}`}
       >
         Share <Share2 className="size-4" strokeWidth={1.6} />
       </button>
       <button
-        onClick={exportCsv}
-        style={pos(1756, 133, 133, 64)}
-        className={`flex items-center justify-center gap-2 rounded-[10px] bg-ink text-[18px] text-surface ${desktop ? "" : "h-12 px-5"}`}
+        style={pos(1729, 141, 160, 48)}
+        className={`flex items-center justify-center gap-2 rounded-[10px] bg-ink text-[18px] text-surface ${desktop ? "" : "h-10 px-5"}`}
       >
-        Export <Download className="size-5" strokeWidth={1.6} />
+        View Full Map <Eye className="size-5" strokeWidth={1.6} />
       </button>
 
       {/* Pins */}

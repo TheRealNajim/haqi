@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, useLayoutEffect, type ErrorInfo, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { HomePage } from "@/pages/Home";
 
@@ -48,7 +48,41 @@ class AppErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 }
 
+// Refreshing must not move the reader: the SPA shell starts empty, so the
+// browser's own scroll restoration clamps to the top before React renders.
+// Remember the position instead and put it back once the layout is committed.
+const SCROLL_KEY = "haqi:refresh-scroll";
+
+function useRefreshScrollRestoration() {
+  useLayoutEffect(() => {
+    if ("scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
+
+    const saved = Number(sessionStorage.getItem(SCROLL_KEY));
+    if (Number.isFinite(saved) && saved > 0) {
+      window.scrollTo(0, saved);
+    }
+
+    let frame = 0;
+    const save = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        sessionStorage.setItem(SCROLL_KEY, String(window.scrollY));
+      });
+    };
+    window.addEventListener("scroll", save, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", save);
+    };
+  }, []);
+}
+
 export default function App() {
+  useRefreshScrollRestoration();
+
   return (
     <>
       <AppErrorBoundary>

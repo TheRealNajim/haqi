@@ -8,6 +8,10 @@ describe("Home", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { level: 1, name: "World Risk Map" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All Regions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
+    expect(screen.getByAltText("Your profile")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 3, name: "Risk Type Distribution" }),
     ).toBeInTheDocument();

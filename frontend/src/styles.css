@@ -187,3 +187,52 @@
     letter-spacing: -0.015em;
   }
 }
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.screen-in {
+  animation: screen-in 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes map-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes map-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.map-enter {
+  animation: map-in 280ms ease-out both;
+}
+
+.map-exit {
+  animation: map-out 180ms ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-in,
+  .map-enter,
+  .map-exit {
+    animation: none;
+  }
+}

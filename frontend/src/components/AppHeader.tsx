@@ -30,6 +30,8 @@ type AppHeaderProps = {
   filters: HeaderFilters;
   filterOptions: Record<HeaderFilterKey, string[]>;
   disabledFilters?: Partial<Record<HeaderFilterKey, boolean>>;
+  /** Hide the map filters where they are not relevant (mobile Ask). */
+  showFilters?: boolean;
   onFilterChange: (key: HeaderFilterKey, value: string) => void;
 };
 
@@ -40,6 +42,7 @@ export function AppHeader({
   filters,
   filterOptions,
   disabledFilters,
+  showFilters = true,
   onFilterChange,
 }: AppHeaderProps) {
   const [notifOpen, setNotifOpen] = useState(false);
@@ -109,24 +112,25 @@ export function AppHeader({
           />
         </label>
 
-        {FILTER_KEYS.map((key) => (
-          <div
-            key={key}
-            style={desktop ? { width: FILTER_WIDTHS[key] * K } : undefined}
-            className={
-              desktop ? "" : "h-10 min-w-[132px] flex-1 min-[900px]:min-w-0 min-[900px]:flex-none"
-            }
-          >
-            <Dropdown
-              className="h-full"
-              value={filters[key]}
-              onChange={(value) => onFilterChange(key, value)}
-              options={filterOptions[key]}
-              disabled={Boolean(disabledFilters?.[key])}
-              small={!desktop}
-            />
-          </div>
-        ))}
+        {showFilters &&
+          FILTER_KEYS.map((key) => (
+            <div
+              key={key}
+              style={desktop ? { width: FILTER_WIDTHS[key] * K } : undefined}
+              className={
+                desktop ? "" : "h-10 min-w-[132px] flex-1 min-[900px]:min-w-0 min-[900px]:flex-none"
+              }
+            >
+              <Dropdown
+                className="h-full"
+                value={filters[key]}
+                onChange={(value) => onFilterChange(key, value)}
+                options={filterOptions[key]}
+                disabled={Boolean(disabledFilters?.[key])}
+                small={!desktop}
+              />
+            </div>
+          ))}
 
         <div
           style={desktop ? { marginLeft: 73 * K } : undefined}

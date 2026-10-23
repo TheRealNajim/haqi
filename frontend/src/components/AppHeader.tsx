@@ -61,16 +61,16 @@ export function AppHeader({
 
   return (
     <header className={desktop ? "contents" : "flex flex-wrap items-center gap-3"}>
-      <div style={canvasPosition(desktop, 28, 31, 42, 56)} className="flex items-center text-ink">
-        <svg viewBox="0 0 42 46" className="size-[42px]" fill="currentColor">
-          <circle cx="8" cy="8" r="5" />
-          <circle cx="24" cy="6" r="5.5" />
-          <circle cx="36" cy="16" r="5" />
-          <circle cx="18" cy="20" r="6" />
-          <circle cx="6" cy="28" r="5" />
-          <circle cx="30" cy="30" r="5.5" />
-          <circle cx="16" cy="38" r="5" />
-        </svg>
+      <div style={canvasPosition(desktop, 23, 33, 52, 52)} className="flex shrink-0 items-center">
+        <img
+          src={dark ? "/favicon-dark-mode.png" : "/favicon-light-mode.png"}
+          alt="haqi"
+          width={2000}
+          height={2000}
+          className={`select-none ${desktop ? "h-full w-full" : "size-[42px]"} ${
+            dark ? "mix-blend-screen" : "mix-blend-multiply"
+          }`}
+        />
       </div>
 
       <div

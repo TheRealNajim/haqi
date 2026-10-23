@@ -12,6 +12,7 @@ describe("Home", () => {
     expect(screen.getByRole("button", { name: "Select Region" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Switch to dark theme" })).toBeInTheDocument();
+    expect(screen.getByAltText("haqi")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 3, name: "Risk Type Distribution" }),
     ).toBeInTheDocument();

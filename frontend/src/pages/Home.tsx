@@ -21,6 +21,7 @@ import worldMap from "@/assets/world-map.jpg";
 import miniMap from "@/assets/mini-map.jpg";
 import { AppHeader, type HeaderFilterKey } from "@/components/AppHeader";
 import { Dropdown } from "@/components/Dropdown";
+import { AREAS_BY_COUNTRY, COUNTRIES_BY_REGION } from "@/data/geo";
 import { H, K, W, canvasPosition } from "@/lib/canvas";
 
 /* ---------- small building blocks ---------- */
@@ -157,10 +158,10 @@ export function HomePage() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(() => viewportWidth() / W);
   const [desktop, setDesktop] = useState(() => window.innerWidth >= 1100);
-  const [region, setRegion] = useState("All Regions");
-  const [assets, setAssets] = useState("All Assets");
-  const [riskType, setRiskType] = useState("All Risk Type");
-  const [period, setPeriod] = useState("Last 30 Days");
+  const [region, setRegion] = useState("");
+  const [country, setCountry] = useState("");
+  const [area, setArea] = useState("");
+  const [riskType, setRiskType] = useState("");
   const [months, setMonths] = useState("12 months");
   const [nav, setNav] = useState(0);
   const [navHover, setNavHover] = useState<{ label: string; top: number } | null>(null);
@@ -183,10 +184,33 @@ export function HomePage() {
   const sorted = sortDesc ? [...regions].sort((a, b) => b.score - a.score) : regions;
 
   const setFilter = (key: HeaderFilterKey, value: string) => {
-    if (key === "region") setRegion(value);
-    else if (key === "assets") setAssets(value);
-    else if (key === "riskType") setRiskType(value);
-    else setPeriod(value);
+    if (key === "region") {
+      setRegion(value === "Select Region" ? "" : value);
+      setCountry("");
+      setArea("");
+    } else if (key === "country") {
+      setCountry(value === "Select Country" ? "" : value);
+      setArea("");
+    } else if (key === "area") {
+      setArea(value === "Select Area" ? "" : value);
+    } else {
+      setRiskType(value === "All Risk Type" ? "" : value);
+    }
+  };
+
+  // Options cascade: each filter only offers values that belong to its parent.
+  const filterOptions = {
+    region: ["Select Region", ...Object.keys(COUNTRIES_BY_REGION)],
+    country: region ? ["Select Country", ...(COUNTRIES_BY_REGION[region] ?? [])] : [],
+    area: country ? ["Select Area", ...(AREAS_BY_COUNTRY[country] ?? [])] : [],
+    riskType: ["All Risk Type", "Wildfire", "Flood", "Water Stress", "Extreme Heat"],
+  };
+
+  const filterValues = {
+    region: region || "Select Region",
+    country: region ? country || "Select Country" : "Select region first",
+    area: country ? area || "Select Area" : "Select country first",
+    riskType: riskType || "All Risk Type",
   };
 
   const share = async () => {
@@ -225,7 +249,9 @@ export function HomePage() {
         desktop={desktop}
         query={query}
         onQueryChange={setQuery}
-        filters={{ region, assets, riskType, period }}
+        filters={filterValues}
+        filterOptions={filterOptions}
+        disabledFilters={{ country: !region, area: !country }}
         onFilterChange={setFilter}
       />
 
@@ -396,7 +422,7 @@ export function HomePage() {
           <h3 className="text-[21px] tracking-[-0.01em] text-ink">Risk Type Distribution</h3>
           <button
             aria-label="Open distribution"
-            onClick={() => setRiskType("All Risk Type")}
+            onClick={() => setRiskType("")}
             className="flex size-[50px] items-center justify-center rounded-full border border-border text-ink"
           >
             <ArrowUpRight className="size-5" strokeWidth={1.6} />

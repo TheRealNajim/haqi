@@ -159,11 +159,25 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --canvas: oklch(0.16 0 0);
+  --surface: oklch(0.22 0 0);
+  --ink: oklch(0.96 0 0);
+  --ink-soft: oklch(0.78 0 0);
+  --ink-faint: oklch(0.6 0 0);
+  --risk-red-soft: oklch(0.3 0.07 22);
+  --risk-orange-soft: oklch(0.32 0.07 60);
+  --bar-idle: oklch(0.38 0 0);
+  --shadow-soft: 0 10px 30px -12px oklch(0 0 0 / 0.5);
+  color-scheme: dark;
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
   }
 
   body {

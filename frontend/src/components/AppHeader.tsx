@@ -1,31 +1,25 @@
 import { useState } from "react";
-import { Bell, Search } from "lucide-react";
+import { Bell, Moon, Search, Sun } from "lucide-react";
 
-import avatar from "@/assets/avatar.jpg";
 import { Dropdown } from "@/components/Dropdown";
 import { K, canvasPosition } from "@/lib/canvas";
 
 export type HeaderFilters = {
   region: string;
-  assets: string;
+  country: string;
+  area: string;
   riskType: string;
-  period: string;
 };
 
 export type HeaderFilterKey = keyof HeaderFilters;
 
-const FILTER_OPTIONS: Record<HeaderFilterKey, string[]> = {
-  region: ["All Regions", "Europe", "Africa", "Asia", "Middle East", "Americas"],
-  assets: ["All Assets", "Facilities", "Suppliers", "Warehouses"],
-  riskType: ["All Risk Type", "Wildfire", "Flood", "Water Stress", "Extreme Heat"],
-  period: ["Last 7 Days", "Last 30 Days", "Last 90 Days", "Last 12 Months"],
-};
+const FILTER_KEYS: HeaderFilterKey[] = ["region", "country", "area", "riskType"];
 
 const FILTER_WIDTHS: Record<HeaderFilterKey, number> = {
-  region: 132,
-  assets: 126,
-  riskType: 148,
-  period: 152,
+  region: 156,
+  country: 164,
+  area: 174,
+  riskType: 152,
 };
 
 type AppHeaderProps = {
@@ -34,6 +28,8 @@ type AppHeaderProps = {
   query: string;
   onQueryChange: (value: string) => void;
   filters: HeaderFilters;
+  filterOptions: Record<HeaderFilterKey, string[]>;
+  disabledFilters?: Partial<Record<HeaderFilterKey, boolean>>;
   onFilterChange: (key: HeaderFilterKey, value: string) => void;
 };
 
@@ -42,9 +38,26 @@ export function AppHeader({
   query,
   onQueryChange,
   filters,
+  filterOptions,
+  disabledFilters,
   onFilterChange,
 }: AppHeaderProps) {
   const [notifOpen, setNotifOpen] = useState(false);
+  const [dark, setDark] = useState(() => {
+    const stored = localStorage.getItem("haqi-theme");
+    const next = stored ? stored === "dark" : false;
+    document.documentElement.classList.toggle("dark", next);
+    return next;
+  });
+
+  const toggleTheme = () => {
+    setDark((prev) => {
+      const next = !prev;
+      document.documentElement.classList.toggle("dark", next);
+      localStorage.setItem("haqi-theme", next ? "dark" : "light");
+      return next;
+    });
+  };
 
   return (
     <header className={desktop ? "contents" : "flex flex-wrap items-center gap-3"}>
@@ -96,7 +109,7 @@ export function AppHeader({
           />
         </label>
 
-        {(Object.keys(FILTER_OPTIONS) as HeaderFilterKey[]).map((key) => (
+        {FILTER_KEYS.map((key) => (
           <div
             key={key}
             style={desktop ? { width: FILTER_WIDTHS[key] * K } : undefined}
@@ -108,8 +121,8 @@ export function AppHeader({
               className="h-full"
               value={filters[key]}
               onChange={(value) => onFilterChange(key, value)}
-              options={FILTER_OPTIONS[key]}
-              muted={key === "riskType" || key === "period"}
+              options={filterOptions[key]}
+              disabled={Boolean(disabledFilters?.[key])}
               small={!desktop}
             />
           </div>
@@ -142,14 +155,20 @@ export function AppHeader({
             )}
           </div>
 
-          <img
-            src={avatar}
-            alt="Your profile"
-            width={64}
-            height={64}
+          <button
+            onClick={toggleTheme}
+            aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
             style={desktop ? { width: 48 * K, height: 48 * K } : undefined}
-            className={`rounded-[10px] object-cover ${desktop ? "" : "size-10"}`}
-          />
+            className={`flex items-center justify-center rounded-[10px] bg-surface text-ink ${
+              desktop ? "" : "size-10"
+            }`}
+          >
+            {dark ? (
+              <Moon className="size-5" strokeWidth={1.4} />
+            ) : (
+              <Sun className="size-5" strokeWidth={1.4} />
+            )}
+          </button>
         </div>
       </div>
     </header>

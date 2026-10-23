@@ -5,18 +5,19 @@ type DropdownProps = {
   options: string[];
   value: string;
   onChange: (value: string) => void;
-  muted?: boolean;
   className?: string;
   small?: boolean;
+  /** Shown as a hint and not interactive until its parent filter is chosen. */
+  disabled?: boolean;
 };
 
 export function Dropdown({
   options,
   value,
   onChange,
-  muted,
   className = "",
   small,
+  disabled = false,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -30,15 +31,19 @@ export function Dropdown({
   return (
     <div ref={ref} className={`relative ${className}`}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!disabled) setOpen((o) => !o);
+        }}
+        aria-disabled={disabled || undefined}
+        title={value}
         className={`flex h-full w-full items-center justify-between gap-2 rounded-[10px] bg-surface ${
-          small ? "px-3 text-[14px]" : "px-4 text-[16px]"
-        } ${muted ? "text-ink-faint" : "text-ink"}`}
+          disabled || small ? "px-3 text-[14px]" : "px-4 text-[16px]"
+        } ${disabled ? "cursor-not-allowed text-ink-faint" : "cursor-pointer text-ink"}`}
       >
-        <span className="whitespace-nowrap">{value}</span>
+        <span className="truncate">{value}</span>
         <ChevronDown className="size-3.5 shrink-0" strokeWidth={1.5} />
       </button>
-      {open && (
+      {open && !disabled && (
         <ul className="absolute left-0 top-full z-50 mt-1 min-w-full overflow-hidden rounded-[10px] bg-surface py-1 shadow-[var(--shadow-soft)]">
           {options.map((o) => (
             <li key={o}>
@@ -47,7 +52,7 @@ export function Dropdown({
                   onChange(o);
                   setOpen(false);
                 }}
-                className={`block w-full whitespace-nowrap px-4 py-2 text-left text-[15px] hover:bg-canvas ${
+                className={`block w-full cursor-pointer whitespace-nowrap px-4 py-2 text-left text-[15px] hover:bg-canvas ${
                   o === value ? "text-ink" : "text-ink-soft"
                 }`}
               >

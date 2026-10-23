@@ -9,7 +9,7 @@ from app.adapters.openaq import OpenAQAdapter
 from app.adapters.pollen import PollenAdapter
 from app.adapters.weather import WeatherAdapter
 from app.profiles import Profile, get as get_profile
-from app.schemas import Verdict, VerdictLevel
+from app.schemas import SourceType, Verdict, VerdictLevel
 from app.trust import apply_weights, consensus
 
 _STATION_LIKE = (OpenAQAdapter, WeatherAdapter, FireAdapter)
@@ -48,6 +48,12 @@ async def investigate(
         except AdapterError as e:
             blind.append(str(e))
             stages.append({"adapter": adapter.source_type, "ok": False, "detail": str(e)})
+        else:
+            note = getattr(adapter, "primary_error", None)
+            if note:  # fallback covered it, but the judge still reads why
+                blind.append(note)
+                stages.append({"adapter": adapter.source_type, "ok": True,
+                               "note": note})
 
     evidence = apply_weights(evidence)
     value_raw, conflicts = consensus(evidence)
@@ -57,6 +63,11 @@ async def investigate(
     # Never bless a blind verdict: when consensus has nothing comparable, the
     # safest honest level is "be careful" — uncertainty is not a green light.
     no_data = any("no quantitative readings" in c for c in conflicts)
+    fresh_quant = [
+        e for e in evidence
+        if e.source_type is SourceType.STATION and not e.staleness_flag
+    ]
+    stale_only = bool(evidence) and not fresh_quant
     level, window, reason = _verdict(value, profile, parsed, bool(question), exertion, value_raw)
     if no_data:
         level = VerdictLevel.CAREFUL
@@ -67,6 +78,20 @@ async def investigate(
             + str(len(stages))
             + " — act cautious, not confident"
         )
+    if stale_only:
+        # stale-only data never blesses a green light: down-weighted numbers are
+        # opinions from yesterday, and the verdict must say so
+        blind.append(
+            "the nearest station readings are more than an hour old — "
+            "weights dropped until a fresh source confirms"
+        )
+        level = VerdictLevel.CAREFUL
+        window = "treat as uncertain"
+        reason = (
+            "our freshest sensors are quiet — the nearest readings are old — "
+            + "treat cautiously, not confidently"
+        )
+        value_raw = None  # don't publish a stale number as live AQI
 
     verdict = Verdict(
         schema_version=1,

@@ -1,4 +1,13 @@
-"""Ground station AQI via OpenAQ v3 (free key) with WAQI fallback."""
+"""Ground station PM2.5 via OpenAQ v3 (verified live shape) with WAQI fallback.
+
+v3 reality (probed live, Oct 2026):
+ - GET /v3/locations?coordinates&radius -> locations[], each with sensors[]:
+   {id: sensorsId, parameter: {name}}
+ - GET /v3/locations/{id}/latest -> results[]: {sensorsId, value,
+   datetime: {utc}} — NO parameter name, hence the sensor map.
+ - There is no order_by=distance in this build; we sort client-side.
+"""
+import math
 import os
 from datetime import datetime, timezone
 
@@ -9,8 +18,9 @@ from app.adapters.base import AdapterError, BaseAdapter
 from app.schemas import Evidence, SourceType
 from app.trust import pm25_from_aqi
 
-OPENAQ_URL = "https://api.openaq.org/v3/locations"
+OPENAQ_URL = "https://api.openaq.org/v3"
 WAQI_URL = "https://api.waqi.info/feed/geo:{lat};{lon}/"
+MAX_STATIONS = 3  # keep latency sane: nearest 3 detailed + latested
 
 
 class OpenAQAdapter(BaseAdapter):
@@ -19,61 +29,100 @@ class OpenAQAdapter(BaseAdapter):
     def __init__(self) -> None:
         self.openaq_key = os.getenv("OPENAQ_API_KEY", "")
         self.waqi_token = os.getenv("WAQI_TOKEN", "")
+        # consumers (agent loop) read this to surface primary-failure honesty
+        self.primary_error: str | None = None
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
-    async def _fetch_openaq(self, lat: float, lon: float) -> dict:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(
-                OPENAQ_URL,
-                params={
-                    "coordinates": f"{lat},{lon}",
-                    "radius": 25000,
-                    "limit": 5,
-                    "order_by": "distance",
-                },
-                headers={"X-API-Key": self.openaq_key} if self.openaq_key else {},
-            )
-            r.raise_for_status()
-            return r.json()
-
-    def _to_evidence(self, payload: dict) -> list[Evidence]:
-        now = datetime.now(timezone.utc)
-        out = []
-        for loc in payload.get("results", []):
-            pm25 = next(
-                (p for p in loc.get("parameters", []) if p.get("parameter") == "pm25"), None
-            )
-            if not pm25 or pm25.get("value") is None:
-                continue
-            last = pm25.get("lastValue") or now
-            observed = self._parse_dt(last)
-            stale = (now - observed).total_seconds() > 3600
-            out.append(Evidence(
-                claim=f"nearest station reads PM2.5 {pm25['value']:.0f} µg/m³",
-                source_id=f"openaq:{loc.get('id')}",
-                source_type=SourceType.STATION,
-                retrieved_at=now,
-                observed_at=observed,
-                geo_distance_km=loc.get("distance"),
-                raw_value=pm25["value"],
-                unit="µg/m³",
-                staleness_flag=stale,
-            ))
-        if not out:
-            raise AdapterError("openaq: no stations with PM2.5 in radius")
-        return out
+    async def _get(self, client: httpx.AsyncClient, path: str, **params) -> dict:
+        r = await client.get(OPENAQ_URL + path, params=params,
+                             headers={"X-API-Key": self.openaq_key})
+        r.raise_for_status()
+        return r.json()
 
     @staticmethod
-    def _parse_dt(value) -> datetime:
-        if isinstance(value, str):
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
-        return datetime.now(timezone.utc)
+    def _km(lat1, lon1, lat2, lon2) -> float:
+        a = (math.radians(lat2 - lat1), math.radians(lon2 - lon1) * math.cos(math.radians((lat1 + lat2) / 2)))
+        return 6371.0 * math.hypot(*a)
+
+    async def _nearby(self, lat: float, lon: float) -> list[dict]:
+        async with httpx.AsyncClient(timeout=15) as client:
+            payload = await self._get(
+                client, "/locations", coordinates=f"{lat},{lon}",
+                radius=25000, limit=25,
+            )
+        cands = []
+        for loc in payload.get("results", []):
+            c = loc.get("coordinates") or {}
+            if c.get("latitude") is None:
+                continue
+            dist = self._km(lat, lon, c["latitude"], c["longitude"])
+            sensors = loc.get("sensors") or []
+            if not any(s.get("parameter", {}).get("name") == "pm25" for s in sensors):
+                continue
+            cands.append({"id": loc["id"], "distance_km": round(dist, 2),
+                          "sensors": {s["id"]: s["parameter"]["name"] for s in sensors}})
+        cands.sort(key=lambda x: x["distance_km"])
+        return cands[:MAX_STATIONS]
+
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=1, max=6))
+    async def _fetch_openaq(self, lat: float, lon: float) -> list[Evidence]:
+        stations = await self._nearby(lat, lon)
+        if not stations:
+            raise LookupError("no stations with pm25 sensor in 25 km")
+        out = []
+        async with httpx.AsyncClient(timeout=15) as client:
+            for st in stations:
+                late = await self._get(client, f"/locations/{st['id']}/latest")
+                for row in late.get("results", []):
+                    if st["sensors"].get(row.get("sensorsId")) != "pm25":
+                        continue
+                    out.append((st, row))
+                if out:
+                    break  # nearest station with a reading is enough
+        if not out:
+            raise LookupError("nearest pm25 stations returned no latest values")
+        return [self._evidence_from(st, row) for st, row in out]
+
+    def _evidence_from(self, st: dict, row: dict) -> Evidence:
+        now = datetime.now(timezone.utc)
+        utc = row.get("datetime", {}).get("utc")
+        observed = (
+            datetime.fromisoformat(utc.replace("Z", "+00:00"))
+            if isinstance(utc, str) else now
+        )
+        stale = (now - observed).total_seconds() > 3600
+        val = float(row["value"])
+        return Evidence(
+            claim=("nearest station reads PM2.5 %.0f µg/m³" % val)
+            + (" — last logged more than an hour ago" if stale else ""),
+            source_id=f"openaq:{st['id']}",
+            source_type=SourceType.STATION,
+            retrieved_at=now,
+            observed_at=observed,
+            geo_distance_km=st["distance_km"],
+            raw_value=val,
+            unit="µg/m³",
+            staleness_flag=stale,
+        )
 
     async def gather(self, lat: float, lon: float) -> list[Evidence]:
+        self.primary_error = None
         try:
-            return self._to_evidence(await self._fetch_openaq(lat, lon))
-        except Exception:
+            evs = await self._fetch_openaq(lat, lon)
+        except Exception as e:
+            self.primary_error = f"openaq primary declined: {e}"
             return await self._waqi_fallback(lat, lon)
+        if all(e.staleness_flag for e in evs) and self.waqi_token:
+            # stale stations present + a fresh feed available -> consult both;
+            # the trust layer weighs them, the claim text keeps the story honest
+            self.primary_error = (
+                "openaq-readable stations are stale (last logged >1h ago) — "
+                "fresh WAQI reading added alongside"
+            )
+            try:
+                evs.extend(await self._waqi_fallback(lat, lon))
+            except AdapterError:
+                pass  # waqi may be down too — stale evidence stands alone
+        return evs
 
     async def _waqi_fallback(self, lat: float, lon: float) -> list[Evidence]:
         if not self.waqi_token:

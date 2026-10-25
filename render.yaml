@@ -1,0 +1,31 @@
+# Render Blueprint for the haqi backend.
+# One-click: New Blueprint Instance -> point at this repo (or "Deploy to Render").
+# Render builds on its own servers, so ordinary manylinux wheels install fine.
+services:
+  - type: web
+    name: haqi-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    # Keys go in the Render dashboard (Secret Files/Environment), NEVER in git.
+    # sync:false = Render asks for each value when the blueprint applies.
+    envVars:
+      - key: HAQI_CORS_ORIGINS
+        value: ""   # set to the deployed frontend origin, e.g. https://<ui>.vercel.app
+      - key: OPENAQ_API_KEY
+        sync: false
+      - key: WAQI_TOKEN
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: NASA_FIRMS_MAP_KEY
+        sync: false
+      - key: BRIGHTDATA_API_KEY
+        sync: false
+      - key: BRIGHTDATA_SERP_ZONE
+        value: serp_api1
+      - key: HAQI_LOCATION_NAME
+        value: Lagos

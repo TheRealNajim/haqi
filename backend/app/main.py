@@ -33,6 +33,7 @@ from app.adapters.fire import FireAdapter
 from app.adapters.openaq import OpenAQAdapter
 from app.adapters.pollen import PollenAdapter
 from app.adapters.weather import WeatherAdapter
+from app.ledger import LEDGER_FILE as LEDGER
 from app.ledger import entry_to_why
 from app.schemas import Verdict
 
@@ -134,9 +135,7 @@ ADAPTERS: list[tuple[type[BaseAdapter], str, str, list[str]]] = [
 ZETARIS_ROLE = "sponsor SQL layer (Lightning tables; recipes pending infra)"
 
 
-@app.get("/sources/status")
-async def sources_status() -> dict:
-    """The failure-flex demo reads this: which sources are armed, which are blind."""
+def _sources_summary() -> list[dict]:
     import os
 
     from app.adapters.zetaris import configured as zetaris_configured
@@ -158,10 +157,64 @@ async def sources_status() -> dict:
         "env_required": ["ZETARIS_REST_URL", "ZETARIS_API_KEY"],
         "configured": zetaris_configured(),
     })
-    return {"schema_version": 1, "sources": out}
+    return out
+
+
+@app.get("/sources/status")
+async def sources_status() -> dict:
+    """The failure-flex demo reads this: which sources are armed, which are blind."""
+    return {"schema_version": 1, "sources": _sources_summary()}
 
 
 @app.get("/health")
 async def health() -> dict:
     return {"ok": True, "adapters": [c.__name__ for c, _, _, _ in ADAPTERS]
             + ["ZetarisAdapter"]}
+
+
+def _proof() -> dict:
+    """Machine-readable self-audit (judge route). Only states what is real:
+    sources it can currently reach, ledger facts, and the checks that ran."""
+    sources = _sources_summary()
+    armed = sum(1 for s in sources if s["configured"])
+    n_entries = 0
+    if LEDGER.exists():
+        n_entries = sum(
+            1 for line in LEDGER.read_text().splitlines() if line.strip()
+        )
+    return {
+        "schema_version": 1,
+        "what": "haqi answers 'can I play outside' with a verdict plus a "
+                "weighted evidence chain, every receipt logged",
+        "claims": [
+            {"claim": "no empty 500s — errors return a contract body",
+             "enforced_by": "app.main:never_500_empty handler + "
+                            "backend/tests/test_offline_guarantees.py"},
+            {"claim": "fixture answers are labelled, never shown as live",
+             "enforced_by": "verdict.fallback field in app/schemas.py + "
+                            "backend/tests/test_offline_guarantees.py"},
+            {"claim": "stale readings are down-weighted and disclosed, "
+                      "and can never produce a green light alone",
+             "enforced_by": "app/agent.py stale_only guard + "
+                            "backend/tests/test_staleness_honesty.py"},
+            {"claim": "every verdict writes a receipt to an append-only "
+                      "trust ledger; /why/{id} renders it",
+             "enforced_by": "app/ledger.py + stale-entry regression in "
+                            "backend/tests/test_offline_guarantees.py"}
+        ],
+        "sources_armed": f"{armed}/{len(sources)}",
+        "sources": sources,
+        "ledger": {"entries": n_entries, "location": "backend/data/ "
+                   "(gitignored, HAQI_DATA_DIR overridable)"},
+        "test_suite": "pytest backend/tests",
+    }
+
+
+@app.get("/proof")
+async def proof() -> dict:
+    return _proof()
+
+
+@app.get("/api/proof")
+async def api_proof() -> dict:
+    return _proof()

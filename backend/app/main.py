@@ -24,6 +24,7 @@ def _load_env(cands: list[Path] | None = None) -> None:
 _load_env()
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.agent import investigate
@@ -38,6 +39,19 @@ from app.ledger import entry_to_why
 from app.schemas import Verdict
 
 app = FastAPI(title="haqi", version="0.2.0")
+
+# Browser UIs (Vite dev on 5173, deployed frontend) must be able to call this
+# API; default = local dev origins only, override with HAQI_CORS_ORIGINS.
+_cors = os.getenv("HAQI_CORS_ORIGINS", "").strip()
+_origins = [o.strip() for o in _cors.split(",") if o.strip()] or \
+    ["http://localhost:5173", "http://127.0.0.1:5173"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 FIX = Path(__file__).parent / "fixtures"
 
 

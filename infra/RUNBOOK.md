@@ -31,10 +31,11 @@ Windows specifics (as built, 25 Oct):
   Docker Desktop (`docker desktop restart`).
 - A Docker Desktop restart stops the stack for a minute; containers are `restart:
   unless-stopped` and come back on their own (verified).
-- Run the two shell scripts as root inside Ubuntu, from the bundle path:
-  `wsl -d Ubuntu -u root -- bash -lc 'cd /mnt/c/.../zetaris-platform && ./preflight.sh'`.
-  Repeat `docker login` inside Ubuntu first: preflight reads `$HOME/.docker/config.json`,
-  which is per-user and separate from the Windows credential store.
+- Run the two shell scripts as the normal Ubuntu user `najim`, from the bundle path:
+  `wsl -d Ubuntu -- bash -lc 'cd /mnt/c/.../zetaris-platform && ./preflight.sh'`.
+  Root is not needed; membership in the `docker` group is. Repeat `docker login` inside
+  Ubuntu first: preflight reads `$HOME/.docker/config.json`, which is per-user and separate
+  from the Windows credential store. Both scripts were run as `najim` on 25 Oct (9/9).
 - Memory is what Docker Desktop gives its VM. `MemoryMiB` in `settings-store.json` is
   ignored in 4.96; use Settings > Resources > Memory. At 7.5 GB the gate still passes
   (WARN, not FAIL).
@@ -205,14 +206,26 @@ python backend/smoke_test.py     # from the repo root; expect PASS PASS PASS
 | Service | Port | Owner |
 |---|---|---|
 | haqi backend | 8000 | backend |
-| Zetaris UI | 3000 | infra |
+| Zetaris UI | 3000 (loopback) | infra |
 | Zetaris REST | 8888 | infra |
 | frontend dev server | 5173 | frontend |
 | Zetaris JDBC | 10000 | infra |
 | Meterless runtime | 8088 | infra |
+| Zetaris API internal login route | 8889 (loopback) | vendor — never used by the app |
+| Zetaris Spark UI | 4040 (loopback) | vendor — diagnostics only |
 
-Only the ports above are published; `8889` and the Spark UI are internal/local-only. Check what
-is actually listening with `docker compose ps` (the `PORTS` column) before exposing anything.
+Only the ports above are published. `8888` is the public API; `8889` is the API's internal
+login route, published as `127.0.0.1:8889` by the vendor because the UI needs it — it must
+never be reachable from another machine, and nothing we write should call it. Check what is
+actually listening with `docker port zetaris-api-1` or `docker compose ps` before exposing
+anything.
+
+Security deviation found and closed (25 Oct): the vendor compose publishes the UI as
+`"${UI_PORT:-3000}:3000"`, which binds `0.0.0.0` — the one service outside its own loopback
+policy. The platform `.env` now sets `UI_PORT=127.0.0.1:3000`, so `docker port zetaris-ui-1`
+reports loopback only. Reverting is one line and does not touch images:
+`UI_PORT=3000`, then `docker compose up -d ui`. The previous file is kept beside it as
+`.env.bak-before-loopback`. The bundled `verify.sh` still passes 9/9 after the change.
 `ALLOWED_ORIGINS` in the platform `.env` is `http://localhost:3000` — leave it there for a local
 install; it must change before the UI is served from another host.
 
@@ -371,3 +384,5 @@ docker compose up -d
 | 25 Oct | Confirmed grammar: `SHOW LIGHTNING DATABASES`, `SHOW LIGHTNING TABLES <DB>`, `SHOW TABLES IN <DB>`, `DESCRIBE <DB>.<TABLE>`; metastore has 0 REST tables, 0 datasources | recorded in `infra/zetaris/README.md` |
 | 25 Oct | REST table registration path unproven: no UI wizard in this bundle, `CREATE LIGHTNING REST TABLE` rejected (empty 400), no OpenAPI | BLOCKED — question sent to coordinator |
 | 25 Oct | `infra/backup.ps1` wrote dumps and restored both into throwaway databases, row counts matched | PASS (first drill, 185 + 10 tables) |
+| 25 Oct | UI was bound to `0.0.0.0:3000`; pinned to `127.0.0.1:3000` via `UI_PORT` in the platform `.env` | fixed, `verify.sh` 9/9 after |
+| 25 Oct | `verify.sh` run as the non-root `najim` user after the change | PASS 9/9 |

@@ -40,12 +40,19 @@ async def investigate(
 
     evidence, blind = [], []
     stages = []
+    target_hour = parsed.get("time_hh") if (question and parsed.get("time_desc") not in (None, "now")) else None
+    among_horizon = True
     for adapter in _adapters_for(profile):
         try:
-            found = await adapter.gather(lat, lon)
+            try:  # duck-typed: adapters that know "target_hour" get the plan
+                found = await adapter.gather(lat, lon, target_hour=target_hour)
+            except TypeError:
+                found = await adapter.gather(lat, lon)
             evidence.extend(found)
             stages.append({"adapter": adapter.source_type, "found": len(found), "ok": True})
         except AdapterError as e:
+            if target_hour is not None and "horizon" in str(e):
+                among_horizon = False
             blind.append(str(e))
             stages.append({"adapter": adapter.source_type, "ok": False, "detail": str(e)})
         else:
@@ -93,6 +100,16 @@ async def investigate(
         )
         value_raw = None  # don't publish a stale number as live AQI
 
+    if not among_horizon and question:
+        # asking about a time past our forecast horizon: the honest answer is
+        # "we don't know yet" — never a now-based number dressed as the future
+        level = VerdictLevel.CAREFUL
+        window = f"at {parsed.get('time_desc', '')}".strip()
+        reason = (
+            "we can only see 3 hours ahead; your plan is further out — "
+            + "come back nearer the time, treat this as uncertain"
+        )
+        value_raw = None
     verdict = Verdict(
         schema_version=1,
         level=level,

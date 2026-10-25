@@ -192,7 +192,39 @@ python backend/smoke_test.py     # from the repo root; expect PASS PASS PASS
 | Zetaris JDBC | 10000 | infra |
 | Meterless runtime | 8088 | infra |
 
-## 6. Troubleshooting
+Only the ports above are published; `8889` and the Spark UI are internal/local-only. Check what
+is actually listening with `docker compose ps` (the `PORTS` column) before exposing anything.
+`ALLOWED_ORIGINS` in the platform `.env` is `http://localhost:3000` — leave it there for a local
+install; it must change before the UI is served from another host.
+
+## 6. Backup and recovery
+
+The expensive state is not the containers — it is `zetaris_pgdata` (metastore, accounts, audit,
+registered sources) and the `.env` that holds the keypair password. Restarting is free; losing
+those is not.
+
+```bash
+# Cold backup: stop services but keep volumes, then archive the volume and the bundle .env
+docker compose down
+docker run --rm -v zetaris_pgdata:/from -v "$PWD":/to alpine \
+  tar czf /to/zetaris-pgdata-$(date +%F).tar.gz -C /from .
+cp .env zetaris-platform.env.backup
+docker compose up -d
+
+# Restore: with the stack stopped and the volume empty
+docker compose down
+docker volume create zetaris_pgdata
+docker run --rm -v zetaris_pgdata:/to -v "$PWD":/from alpine \
+  tar xzf /from/zetaris-pgdata-<date>.tar.gz -C /to
+docker compose up -d
+```
+
+- `docker compose down -v` is the one command that destroys both. Treat it as "factory reset".
+- Keep the backup outside this PC if the demo depends on it (OneDrive is enough for a hackathon).
+- The repo `.env` (API token, admin password) is recoverable by regenerating; the platform `.env`
+  (keypair password) is not — datasource credentials encrypted with it are lost with the volume.
+
+## 7. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -206,7 +238,7 @@ python backend/smoke_test.py     # from the repo root; expect PASS PASS PASS
 | New install logs `password authentication failed` | a previous install's `zetaris_pgdata` volume is being reused with a different `POSTGRES_PASSWORD`: `docker compose down -v` (destroys data) or restore the old password |
 | `smoke_test.py` Nemotron FAIL | all three `MODEL_*` must come from one route; check `/v1/models` first, then the model id spelling |
 
-## 7. Status
+## 8. Status
 
 | Date | What | Result |
 |---|---|---|

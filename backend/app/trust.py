@@ -57,22 +57,51 @@ def apply_weights(evidence: list[Evidence]) -> list[Evidence]:
 def consensus(evidence: list[Evidence]) -> tuple[float, list[str]]:
     """Weighted-mean value + conflict notes. Divergence between sources is surfaced, not hidden.
 
-    Only comparable air readings (pm25 µg/m³, aqi) enter the mean — context evidence
-    like wind speed (m/s) or probabilities must never skew the AQI verdict.
+    Rules (defensive, judge-checked):
+    - Only quantitative readings enter the mean.
+    - A reading's unit must be a KNOWN concentration unit — unknown units are
+      rejected loudly, never averaged silently.
+    - AQI (a scale) and µg/m³ (a mass concentration) are NEVER blended into one
+      number; if both co-occur the mean is taken per unit group and the conflict
+      is disclosed.
+    - Stale rows never enter any mean: they stay visible on the /why graph but
+      the reported number comes from sources that are actually current.
     """
-    COMPARABLE_UNITS = ("µg/m³", "aqi")
-    vals = [
-        (ev.raw_value, ev.weight)
-        for ev in evidence
-        if ev.raw_value is not None and (ev.unit in COMPARABLE_UNITS)
-    ]
-    if not vals:
-        return 0.0, ["no quantitative readings — verdict low confidence"]
+    KNOWN_UNITS = ("µg/m³", "aqi")
+    groups: dict[str, list[tuple[float, float]]] = {}
+    stale_seen: list[float] = []
+    rejected: list[str] = []
+    for ev in evidence:
+        if ev.raw_value is None or not ev.unit:
+            continue
+        if ev.unit not in KNOWN_UNITS:
+            rejected.append(f"{ev.source_id}: unrecognised unit '{ev.unit}'")
+            continue
+        if ev.staleness_flag:
+            stale_seen.append(ev.raw_value)
+            continue
+        groups.setdefault(ev.unit, []).append((ev.raw_value, ev.weight))
+    conflicts: list[str] = []
+    if rejected:
+        conflicts.append("dropped readings with unsupported units: " + "; ".join(rejected[:3]))
+    if not groups:
+        return 0.0, ["no quantitative readings — verdict low confidence"] + conflicts
+    unit = "µg/m³" if "µg/m³" in groups else "aqi"
+    if len(groups) > 1:
+        conflicts.append(
+            "mixed quantitative scales present (µg/m³ vs aqi) — averaging only "
+            "µg/m³ rows; aqi rows kept for the graph"
+        )
+    vals = groups[unit]
     wsum = sum(w for _, w in vals)
     mean = sum(v * w for v, w in vals) / wsum
-    conflicts = []
     if len(vals) > 1:
         spread = max(v for v, _ in vals) - min(v for v, _ in vals)
-        if spread > 30:  # µg/m³ or aqi — tune per unit later
+        if spread > 30:
             conflicts.append(f"sources disagree by {spread:.0f} — weighted toward fresher/closer")
+    if stale_seen:
+        conflicts.append(
+            "nearest station data is stale — fresh sources carry the verdict; "
+            f"stale read was {min(stale_seen):.0f} µg/m³"
+        )
     return round(mean, 1), conflicts

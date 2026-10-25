@@ -216,7 +216,75 @@ is actually listening with `docker compose ps` (the `PORTS` column) before expos
 `ALLOWED_ORIGINS` in the platform `.env` is `http://localhost:3000` — leave it there for a local
 install; it must change before the UI is served from another host.
 
-## 6. Backup and recovery
+## 6. Everyday start and the one-command check
+
+Everything below is Windows-side. The stack is started by Docker Desktop, not by hand.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra\healthcheck.ps1
+```
+
+It is read-only and exits non-zero if anything required is down. It checks: Docker engine,
+the four Zetaris services and their health, the two one-shot jobs (`init`, `bootstrap` must
+be `exited 0`, not running), UI `/api/config`, a real `SELECT 1` through REST with the API
+key from `.env`, and the Meterless hotspot plus `/v1/models`. Secrets are read from `.env`
+and never printed. Sample output on a good day:
+
+```
+  PASS  docker engine 29.9.2
+  PASS  postgres: running (healthy)  ... driver, api, ui
+  PASS  init: completed (exit 0)     PASS  bootstrap: completed (exit 0)
+  PASS  ui: /api/config 200
+  PASS  zetaris rest: SELECT 1 -> 1
+  PASS  meterless: /healthz http://127.0.0.1:8088
+  PASS  meterless: /v1/models 73 ids
+  WARN  model route: meterless/auto has no provider - product answers fall back to the deterministic path
+
+Infra is up, 1 warning(s). Read them before the demo.
+```
+
+A `WARN` on the model route is the honest state on 25 Oct: the hotspot is up but nothing serves
+it, so `/v1/models` passes while a completion returns `400`. Pass means infra; the provider is
+a separate credential (`§3`).
+
+Autostart after a reboot (verified 25 Oct):
+
+- Docker Desktop: `AutoStart` is `true` in `%APPDATA%\Docker\settings-store.json`, so the
+  engine comes up at login. The four services are `restart: unless-stopped` and return on
+  their own; `init` and `bootstrap` stay exited by design.
+- Meterless: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Nightshift Runtime.lnk`
+  launches `meterless-runtime.exe`, which starts `meterlessd`. It takes a few seconds after
+  login, so the first health check may be too early.
+- The runtime token is regenerated when the daemon restarts, at
+  `%LOCALAPPDATA%\ai.meterless.runtime\proxy-token`. `MODEL_API_KEY` in `.env` must be
+  updated after every runtime restart or `/v1/models` answers `401` and healthcheck says
+  "token rejected". Copy the value, do not paste it anywhere else.
+
+WSL user: `najim` (uid 1000, member of `docker` only, no sudo) is the default for
+`wsl -d Ubuntu`, set in `/etc/wsl.conf`. Run the vendor scripts as that user:
+
+```bash
+wsl -d Ubuntu -- bash -lc 'cd /mnt/c/.../zetaris-platform && ./verify.sh'
+```
+
+`wsl -d Ubuntu -u root -- …` still works for one-off repairs; day-to-day work does not need
+root and holding the Docker socket is enough.
+
+### The recipe gate
+
+Zetaris is verified, but the backend still cannot use it: `backend/app/adapters/zetaris.py`
+raises until infra publishes a table whose first five columns are
+`source_id, raw_value, unit, distance_km, observed_at`. `infra/zetaris/README.md` records
+what is registered, what the engine supports, and the exact questions blocking a REST table.
+Once a table exists:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra\zetaris\check-recipe.ps1 -Table HAQI.AIR_QUALITY
+```
+
+Exit 0 means the recipe is publishable; the rules themselves are proven by `-SelfTest`.
+
+## 7. Backup and recovery
 
 The expensive state is not the containers — it is `zetaris_pgdata` (metastore, accounts, audit,
 registered sources) and the `.env` that holds the keypair password. Restarting is free; losing
@@ -243,7 +311,7 @@ docker compose up -d
 - The repo `.env` (API token, admin password) is recoverable by regenerating; the platform `.env`
   (keypair password) is not — datasource credentials encrypted with it are lost with the volume.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -258,7 +326,7 @@ docker compose up -d
 | `smoke_test.py` Nemotron FAIL | all three `MODEL_*` must come from one route; check `/v1/models` first, then the model id spelling |
 | Meterless chat `400 no_provider_configured` | runtime is up but nothing serves the route: add a cloud key in the app's Setup (Meterless credit or NVIDIA) or install/start a local model. `/healthz` 200 does not cover this |
 
-## 8. Status
+## 9. Status
 
 | Date | What | Result |
 |---|---|---|
@@ -278,3 +346,10 @@ docker compose up -d
 | 25 Oct | Meterless/Nightshift 1.2.7 installed, SHA-256 verified, `meterlessd` running | done |
 | 25 Oct | Hotspot `/healthz` 200, `/v1/models` 73 ids with token, `:8088` wired into repo `.env` | PASS |
 | 25 Oct | `chat/completions` on `meterless/auto`: 400 "No provider is configured" | FAIL — needs cloud key or local model, see §3 |
+| 25 Oct | Ubuntu user `najim` (docker group, no sudo) created and made the default; `docker`/`compose` work without root | done |
+| 25 Oct | Docker Desktop `AutoStart` set to `true`; engine and all four services return after a restart | PASS |
+| 25 Oct | Nightshift startup shortcut created; runtime still needs its token copied into `.env` after each start | done |
+| 25 Oct | `infra/healthcheck.ps1`: 11 pass + 1 WARN (no model provider), no secrets printed | PASS |
+| 25 Oct | `infra/zetaris/check-recipe.ps1`: 5 self-tests pass; live DESCRIBE against `NY_TAXI.customers` correctly rejected | PASS (no recipe yet) |
+| 25 Oct | Confirmed grammar: `SHOW LIGHTNING DATABASES`, `SHOW LIGHTNING TABLES <DB>`, `SHOW TABLES IN <DB>`, `DESCRIBE <DB>.<TABLE>`; metastore has 0 REST tables, 0 datasources | recorded in `infra/zetaris/README.md` |
+| 25 Oct | REST table registration path unproven: no UI wizard in this bundle, `CREATE LIGHTNING REST TABLE` rejected (empty 400), no OpenAPI | BLOCKED — question sent to coordinator |

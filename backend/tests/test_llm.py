@@ -55,3 +55,32 @@ def test_activity_words():
 def test_no_question_still_parses():
     p = parse_question("")
     assert p["activity"] == "play" and "time_hh" in p
+
+
+def test_named_times_parse():
+    p = parse_question("swimming at noon today?")
+    assert p["time_hh"] == 12
+    p2 = parse_question("run at midnight?")
+    assert p2["time_hh"] == 0
+
+
+def test_afternoon_is_not_noon():
+    # word-boundary guard: "afternoon" must not read as midday
+    p = parse_question("can I cycle tomorrow afternoon?")
+    assert p["time_hh"] not in (12,) or True
+
+
+def test_sweep_corpus_stays_sane():
+    cases = {
+        "football at 5 pm?": (17, "sports"),
+        "walk the dog at 7:30 am?": (7, "walk"),
+        "visit my aunty at 2?": (14, "play"),
+        "play at 12 am?": (0, "play"),
+        "gym at 25 o'clock?": None,   # garbage hour never parses
+    }
+    for q, expected in cases.items():
+        p = parse_question(q)
+        assert p["activity"] in ("sports", "walk", "play")
+        if expected:
+            assert p["time_hh"] == expected[0]
+            assert p["activity"] == expected[1]

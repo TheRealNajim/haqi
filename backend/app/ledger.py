@@ -26,6 +26,10 @@ def log(verdict: dict, question: str, location: dict) -> str:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     ledger_id = f"ledger-{uuid.uuid4().hex[:8]}"
     evidence = verdict.get("evidence", [])
+    conflicts = [
+        f"down-weighted stale: {e.get('source_id')}"
+        for e in evidence if e.get("staleness_flag")
+    ]
     entry = {
         "ledger_id": ledger_id,
         "schema_version": 1,
@@ -50,9 +54,7 @@ def log(verdict: dict, question: str, location: dict) -> str:
             }
             for e in evidence
         ],
-        "conflicts": [v for e in evidence if e.get("staleness_flag")]
-        and [f"down-weighted stale: {e['source_id']}"
-             for e in evidence if e.get("staleness_flag")] or [],
+        "conflicts": conflicts,
     }
     with LEDGER_FILE.open("a") as f:
         f.write(json.dumps(entry) + "\n")

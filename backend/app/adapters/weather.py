@@ -27,6 +27,9 @@ def _desc(wind_speed: float) -> str:
 class WeatherAdapter(BaseAdapter):
     source_type = SourceType.FORECAST
 
+    # OpenWeather forecast5 gives 3-hourly steps; the horizon we treat as verified
+    FORECAST_HOURS = 3
+
     def __init__(self) -> None:
         self.api_key = os.getenv("OPENWEATHER_API_KEY", "")
 
@@ -41,28 +44,64 @@ class WeatherAdapter(BaseAdapter):
             r.raise_for_status()
             return r.json()
 
-    def _to_evidence(self, payload: dict) -> list[Evidence]:
-        """Average the forecast steps that cover the next 3h; keep the window honest."""
+    def _to_evidence(self, payload: dict, target_hour: int | None = None) -> list[Evidence]:
+        """Average the forecast steps that cover the next 3h; keep the window honest.
+
+        target_hour (device-local) selects the bucket matching the kid's plan
+        when it is inside the horizon; beyond-horizon requests raise — the loop
+        then answers cautiously instead of implying today-conditions-verified.
+        """
         now = datetime.now(timezone.utc)
-        horizon = now + timedelta(hours=3)
-        steps = [
-            s
-            for s in payload.get("list", [])
-            if datetime.fromtimestamp(s.get("dt", 0), tz=timezone.utc) <= horizon
+        horizon = now + timedelta(hours=self.FORECAST_HOURS)
+        steps = payload.get("list", [])
+        if target_hour is not None:
+            local = datetime.now()  # device-local (kid's wall-clock)
+            target = local.replace(hour=max(0, min(target_hour, 23)), minute=0,
+                                   second=0, microsecond=0)
+            if target < local:
+                target += timedelta(days=1)
+            # hard ceiling regardless of step availability: OpenWeather ships
+            # 3-hourly steps for days, but our verdict contract only claims a
+            # 3h horizon — a step existing is NOT the same as its being covered
+            if target - local > timedelta(hours=self.FORECAST_HOURS + 1):
+                raise AdapterError(
+                    "openweather: no forecast step covers that time yet — "
+                    "horizon is 3 hours ahead"
+                )
+            # step dts are UTC-aware; compare on the same clock
+            tgt_utc = target.astimezone(timezone.utc)
+            window = [s for s in steps
+                      if self._step_dt(s) <= tgt_utc + timedelta(hours=2)
+                      and self._step_dt(s) >= tgt_utc - timedelta(hours=1)]
+            if not window:
+                raise AdapterError(
+                    "openweather: no forecast step covers that time yet — "
+                    "horizon is 3 hours ahead"
+                )
+        else:
+            window = [
+                s for s in steps
+                if self._step_dt(s) <= horizon
+            ]
+            if not window:
+                raise AdapterError("openweather: no forecast steps within 3h")
+        winds = [
+            s["wind"]["speed"] for s in window
+            if s.get("wind", {}).get("speed") is not None
         ]
-        if not steps:
-            raise AdapterError("openweather: no forecast steps within 3h")
-        winds = [s["wind"]["speed"] for s in steps if s.get("wind", {}).get("speed") is not None]
         gust = max(
-            (s["wind"].get("gust") or 0) for s in steps if s.get("wind", {}).get("speed")
+            (s["wind"].get("gust") or 0) for s in window if s.get("wind", {}).get("speed")
         )
         if not winds:
             raise AdapterError("openweather: no wind data in forecast")
         avg_wind = sum(winds) / len(winds)
+        label = (f"around {target_hour}:00" if target_hour is not None
+                 else f"next {self.FORECAST_HOURS}h")
         out = [
             Evidence(
-                claim=f"next 3h wind ~{avg_wind:.1f} m/s — {_desc(avg_wind)}",
-                source_id="openweather:forecast3h",
+                claim=f"forecast wind {label} ~{avg_wind:.1f} m/s — {_desc(avg_wind)}",
+                source_id=("openweather:forecast3h" if target_hour is None
+                           else f"openweather:forecast@{target_hour}"),
                 source_type=SourceType.FORECAST,
                 retrieved_at=now,
                 observed_at=now,
@@ -70,11 +109,11 @@ class WeatherAdapter(BaseAdapter):
                 unit="m/s",
             )
         ]
-        pops = [s.get("pop") for s in steps if s.get("pop") is not None]
+        pops = [s.get("pop") for s in window if s.get("pop") is not None]
         if pops and max(pops) >= 0.5:  # rain scrubs particulates — supporting evidence
             out.append(
                 Evidence(
-                    claim="rain likely in the next 3h — it washes some dust out",
+                    claim=f"rain likely {label} — it washes some dust out",
                     source_id="openweather:pop3h",
                     source_type=SourceType.FORECAST,
                     retrieved_at=now,
@@ -98,11 +137,17 @@ class WeatherAdapter(BaseAdapter):
             )
         return out
 
-    async def gather(self, lat: float, lon: float) -> list[Evidence]:
+    @staticmethod
+    def _step_dt(step: dict) -> datetime:
+        return datetime.fromtimestamp(step.get("dt", 0), tz=timezone.utc)
+
+    async def gather(self, lat: float, lon: float,
+                     target_hour: int | None = None) -> list[Evidence]:
+        """Public signature; loop passes the parsed plan time when it is known."""
         if not self.api_key:
             raise AdapterError("openweather: no OPENWEATHER_API_KEY — blind to dispersal")
         try:
-            return self._to_evidence(await self._fetch(lat, lon))
+            return self._to_evidence(await self._fetch(lat, lon), target_hour)
         except AdapterError:
             raise
         except Exception as e:

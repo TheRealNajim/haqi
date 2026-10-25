@@ -48,3 +48,25 @@ def test_env_loader_stops_at_first_existing_file(tmp_path):
     finally:
         os.environ.clear()
         os.environ.update(saved)
+
+
+def test_stale_reading_never_crashes_the_ledger(tmp_path, monkeypatch):
+    from app.ledger import entry_to_why, log
+    monkeypatch.setattr("app.ledger.LEDGER_FILE",
+                        __import__("pathlib").Path(tmp_path) / "ledger.jsonl")
+    monkeypatch.setattr("app.ledger.DATA_DIR", __import__("pathlib").Path(tmp_path))
+    v = {
+        "level": "be careful", "window": "now", "reason": "r", "aqi": 88,
+        "evidence": [{
+            "claim": "c", "source_id": "openaq:404479", "source_type": "station",
+            "retrieved_at": "2026-10-22T09:00:00+00:00",
+            "observed_at": "2025-02-12T16:00:00+00:00",
+            "raw_value": 0.9, "unit": "µg/m³", "confidence": 0.5,
+            "staleness_flag": True, "weight": 0.5,
+        }],
+        "blind_spots": [],
+    }
+    lid = log(v, "football?", {"lat": 6.5244, "lon": 3.3792})
+    why = entry_to_why(lid)
+    assert why is not None and why["nodes"]
+    assert any("stale" in e["note"] for e in why["edges"])

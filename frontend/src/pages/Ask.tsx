@@ -10,6 +10,7 @@ import {
   ArrowUp,
   BookOpenCheck,
   ChartNoAxesCombined,
+  CirclePlus,
   CornerDownLeft,
   Eye,
   GitBranch,
@@ -17,6 +18,7 @@ import {
   LoaderCircle,
   MessageCircle,
   Mic,
+  Paperclip,
   Plus,
   Square,
   type LucideIcon,
@@ -34,7 +36,7 @@ import {
   type Tone,
 } from "@/data/ask";
 import { useSpeechInput } from "@/hooks/use-speech";
-import { K, canvasPosition } from "@/lib/canvas";
+import { K, W, canvasPosition } from "@/lib/canvas";
 
 type AskPageProps = {
   desktop: boolean;
@@ -67,6 +69,27 @@ const SECTION_DOT: Record<DemoAnswer["sections"][number]["kind"], string> = {
 const pos = (desktop: boolean, left: number, top: number, width: number, height: number) =>
   canvasPosition(desktop, left, top, width, height);
 
+/**
+ * Shared design width for the capability card grid and the composer, so the
+ * text box + icon rail + their gap line up with the cards edge to edge.
+ */
+const CONTENT_W = 1640;
+
+/** Left edge that centres the shared content column on the design canvas. */
+const CONTENT_X = Math.round((W / K - CONTENT_W) / 2);
+
+/** Left edge of the answer-state right rail (follow-ups and follow-up composer). */
+const RAIL_X = 1227;
+
+/** Answer card width: keeps the 28-unit gutter before the right rail. */
+const ANSWER_W = RAIL_X - CONTENT_X - 28;
+
+/** Capability row placement: top edge, settled content height, and the gap to the composer. */
+const CARD_TOP = 250;
+const CARD_ROW_H = 333;
+const CARD_GAP = 30;
+const COMPOSER_TOP = CARD_TOP + CARD_ROW_H + CARD_GAP;
+
 /** Absolute placement that lets a panel size itself to its content. */
 const autoPos = (desktop: boolean, left: number, top: number, width: number, maxHeight: number) =>
   desktop
@@ -97,8 +120,8 @@ function CapabilityCard({ id, desktop, onPrompt }: CapabilityCardProps) {
 
   return (
     <article
-      className={`flex flex-col rounded-[18px] border border-border bg-surface p-5 shadow-[var(--shadow-soft)] ${
-        desktop ? "h-full" : "min-h-[540px] w-full max-w-[520px] justify-self-center"
+      className={`flex flex-col rounded-[18px] border border-border bg-surface px-5 py-7 shadow-[var(--shadow-soft)] ${
+        desktop ? "h-full" : "w-full max-w-[520px] justify-self-center"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -133,10 +156,6 @@ function CapabilityCard({ id, desktop, onPrompt }: CapabilityCardProps) {
           ))}
         </ul>
       </div>
-
-      <p className="mt-auto pt-4 text-[13px] leading-[1.5] text-ink-faint">
-        Tap a question to add it to the composer.
-      </p>
     </article>
   );
 }
@@ -146,7 +165,7 @@ function CapabilityStrip({ desktop }: { desktop: boolean }) {
   return (
     <div
       role="group"
-      style={desktop ? pos(true, 119, 236, 1200, 40) : undefined}
+      style={desktop ? pos(true, CONTENT_X, 236, 1200, 40) : undefined}
       aria-label="HAQI capabilities"
       className={`flex flex-wrap gap-2 ${desktop ? "" : "mt-5"}`}
     >
@@ -181,6 +200,12 @@ type ComposerProps = {
   label?: string;
 };
 
+const CONTEXT_OPTIONS = [
+  { label: "Location", value: "Location: Ikeja, Lagos" },
+  { label: "Time", value: "Time: right now" },
+  { label: "Activity", value: "Activity: outdoor play" },
+];
+
 function Composer({
   value,
   onChange,
@@ -194,15 +219,14 @@ function Composer({
   label,
 }: ComposerProps) {
   const canSend = value.trim().length > 0 && !thinking;
+  const [contextOpen, setContextOpen] = useState(false);
 
-  useEffect(() => {
-    const element = textareaRef.current;
-    if (!element) return;
-    element.style.height = "auto";
-    const max = desktop ? 160 : 140;
-    element.style.height = `${Math.min(element.scrollHeight, max)}px`;
-    element.style.overflowY = element.scrollHeight > max ? "auto" : "hidden";
-  }, [value, desktop, textareaRef]);
+  const addContext = (context: string) => {
+    const trimmed = value.trim();
+    onChange(trimmed ? `${context} — ${trimmed}` : `${context} — `);
+    setContextOpen(false);
+    textareaRef.current?.focus();
+  };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -217,33 +241,35 @@ function Composer({
         event.preventDefault();
         if (canSend) onSubmit();
       }}
-      className={`flex flex-col rounded-[18px] border border-border bg-surface p-4 shadow-[var(--shadow-soft)] ${
-        desktop ? "h-full p-5" : ""
-      }`}
+      className={`flex items-stretch gap-3 ${desktop ? "h-full" : "h-[200px]"}`}
     >
-      {label && (
-        <div className="mb-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.1em] text-ink-faint">
-          <span aria-hidden className="size-1.5 rounded-full bg-ink" />
-          {label}
-        </div>
-      )}
+      <div
+        className={`flex h-full min-w-0 flex-1 flex-col rounded-[18px] border border-border bg-surface shadow-[var(--shadow-soft)] ${
+          desktop ? "p-5" : "p-4"
+        }`}
+      >
+        {label && (
+          <div className="mb-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.1em] text-ink-faint">
+            <span aria-hidden className="size-1.5 rounded-full bg-ink" />
+            {label}
+          </div>
+        )}
 
-      <label htmlFor="ask-question" className="sr-only">
-        Your question
-      </label>
-      <textarea
-        id="ask-question"
-        ref={textareaRef}
-        rows={2}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Ask HAQI about the air around you..."
-        className="min-h-[96px] w-full resize-none bg-transparent text-[17px] leading-[1.55] text-ink outline-none placeholder:text-ink-faint"
-      />
+        <label htmlFor="ask-question" className="sr-only">
+          Your question
+        </label>
+        <textarea
+          id="ask-question"
+          ref={textareaRef}
+          rows={2}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask HAQI about the air around you..."
+          className="min-h-0 w-full flex-1 resize-none overflow-y-auto bg-transparent text-[17px] leading-[1.55] text-ink outline-none placeholder:text-ink-faint"
+        />
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 text-[12px] leading-[1.4] text-ink-faint" aria-live="polite">
+        <div className="mt-2 min-w-0 text-[12px] leading-[1.4] text-ink-faint" aria-live="polite">
           {listening ? (
             <span className="flex items-center gap-2 text-risk-red">
               <span className="size-2 animate-pulse rounded-full bg-risk-red motion-reduce:animate-none" />
@@ -251,71 +277,123 @@ function Composer({
             </span>
           ) : thinking ? (
             "HAQI is checking the demo fixtures…"
-          ) : speechSupported ? (
-            "Enter to send · Shift+Enter for a new line"
-          ) : (
+          ) : !speechSupported ? (
             "Voice input is unavailable in this browser — type your question instead."
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid shrink-0 grid-rows-4 gap-2">
+        <button
+          type="button"
+          onClick={() => toast("Attachments aren't supported in this demo yet.")}
+          title="Attach a file"
+          aria-label="Attach a file"
+          className="flex aspect-square min-h-0 items-center justify-center rounded-[10px] bg-surface text-ink transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+        >
+          <Paperclip className="size-[38%]" strokeWidth={1.6} />
+        </button>
+
+        <div className="relative flex aspect-square min-h-0">
+          <button
+            type="button"
+            onClick={() => setContextOpen((open) => !open)}
+            title="Add context"
+            aria-label="Add context"
+            aria-haspopup="menu"
+            aria-expanded={contextOpen}
+            className="flex h-full w-full items-center justify-center rounded-[10px] bg-surface text-ink transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+          >
+            <CirclePlus className="size-[38%]" strokeWidth={1.6} />
+          </button>
+
+          {contextOpen && (
+            <>
+              <div
+                aria-hidden
+                onClick={() => setContextOpen(false)}
+                className="fixed inset-0 z-40 cursor-default"
+              />
+              <div
+                role="menu"
+                aria-label="Add context"
+                className="absolute right-full top-0 z-50 mr-2 w-60 rounded-[12px] bg-surface p-2 shadow-[var(--shadow-soft)]"
+              >
+                <p className="px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-ink-faint">
+                  Add context
+                </p>
+                {CONTEXT_OPTIONS.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    role="menuitem"
+                    aria-label={`Add ${option.value}`}
+                    onClick={() => addContext(option.value)}
+                    className="flex w-full flex-col items-start rounded-[8px] px-2 py-2 text-left transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+                  >
+                    <span className="text-[13px] text-ink">{option.label}</span>
+                    <span className="text-[11px] text-ink-faint">{option.value}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={onToggleMic}
-            title={
-              speechSupported
-                ? listening
-                  ? "Stop voice input"
-                  : "Start voice input"
-                : "Voice input is not supported in this browser"
-            }
-            aria-label={
-              speechSupported
-                ? listening
-                  ? "Stop voice input"
-                  : "Start voice input"
-                : "Voice input unavailable in this browser"
-            }
-            aria-pressed={listening}
-            className={`relative flex size-11 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
-              listening
-                ? "border-risk-red bg-risk-red text-surface"
-                : "border-border bg-canvas text-ink hover:border-ink/25"
-            }`}
-          >
-            {listening && (
-              <span
-                aria-hidden
-                className="absolute inset-0 -z-10 animate-ping rounded-full bg-risk-red/30 motion-reduce:animate-none"
-              />
-            )}
-            {listening ? (
-              <Square className="size-3.5 fill-current" strokeWidth={1.6} />
-            ) : (
-              <Mic className="size-4" strokeWidth={1.6} />
-            )}
-          </button>
+        <button
+          type="button"
+          onClick={onToggleMic}
+          title={
+            speechSupported
+              ? listening
+                ? "Stop voice input"
+                : "Start voice input"
+              : "Voice input is not supported in this browser"
+          }
+          aria-label={
+            speechSupported
+              ? listening
+                ? "Stop voice input"
+                : "Start voice input"
+              : "Voice input unavailable in this browser"
+          }
+          aria-pressed={listening}
+          className={`relative flex aspect-square min-h-0 items-center justify-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            listening ? "bg-risk-red text-surface" : "bg-surface text-ink hover:bg-canvas"
+          }`}
+        >
+          {listening && (
+            <span
+              aria-hidden
+              className="absolute inset-0 -z-10 animate-ping rounded-[10px] bg-risk-red/30 motion-reduce:animate-none"
+            />
+          )}
+          {listening ? (
+            <Square className="size-[32%] fill-current" strokeWidth={1.6} />
+          ) : (
+            <Mic className="size-[38%]" strokeWidth={1.6} />
+          )}
+        </button>
 
-          <button
-            type="submit"
-            disabled={!canSend}
-            aria-label={thinking ? "HAQI is thinking" : "Send question"}
-            className={`flex size-11 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
-              canSend
-                ? "bg-ink text-surface hover:opacity-90"
-                : "cursor-not-allowed bg-bar-idle/35 text-ink-faint"
-            }`}
-          >
-            {thinking ? (
-              <LoaderCircle
-                className="size-4 animate-spin motion-reduce:animate-none"
-                strokeWidth={1.8}
-              />
-            ) : (
-              <ArrowUp className="size-4" strokeWidth={2.2} />
-            )}
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={!canSend}
+          aria-label={thinking ? "HAQI is thinking" : "Send question"}
+          className={`flex aspect-square min-h-0 items-center justify-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            canSend
+              ? "bg-surface text-ink hover:bg-canvas"
+              : "cursor-not-allowed bg-surface text-ink-faint/50"
+          }`}
+        >
+          {thinking ? (
+            <LoaderCircle
+              className="size-[38%] animate-spin motion-reduce:animate-none"
+              strokeWidth={1.8}
+            />
+          ) : (
+            <ArrowUp className="size-[38%]" strokeWidth={2.2} />
+          )}
+        </button>
       </div>
     </form>
   );
@@ -471,7 +549,7 @@ function AnswerPanel({
 }) {
   return (
     <div
-      style={desktop ? autoPos(true, 119, 300, 1080, 890) : undefined}
+      style={desktop ? autoPos(true, CONTENT_X, 300, ANSWER_W, 890) : undefined}
       className={`flex flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-[var(--shadow-soft)] ${
         desktop ? "" : "mt-5"
       }`}
@@ -534,7 +612,7 @@ function FollowUps({
 
   return (
     <div
-      style={desktop ? autoPos(true, 1227, 632, 661, 350) : undefined}
+      style={desktop ? autoPos(true, RAIL_X, 632, 661, 350) : undefined}
       className={`rounded-[18px] border border-border bg-surface p-5 shadow-[var(--shadow-soft)] ${
         desktop ? "" : "mt-4"
       }`}
@@ -562,41 +640,6 @@ function FollowUps({
       </ul>
       <p className="mt-4 border-t border-border pt-3 text-[11px] leading-[1.5] text-ink-faint">
         Follow-ups fill the composer. Edit one before sending, or ask your own question.
-      </p>
-    </div>
-  );
-}
-
-function DemoNote({ desktop, variant }: { desktop: boolean; variant: "welcome" | "answer" }) {
-  const body =
-    "HAQI is answering from local demo fixtures. Nothing here is a live reading, and no question leaves your browser.";
-
-  if (variant === "welcome") {
-    return (
-      <div
-        style={desktop ? autoPos(true, 119, 1096, 1200, 80) : undefined}
-        className={`text-[12px] leading-[1.5] ${desktop ? "" : "mt-4"}`}
-      >
-        <div className="inline-flex max-w-full items-start gap-2 rounded-[10px] border border-border bg-surface px-3 py-2 text-ink-soft shadow-[var(--shadow-soft)]">
-          <Info className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.6} />
-          <p>{body} Voice input uses your browser&apos;s speech recognition where available.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={desktop ? autoPos(true, 1227, 1000, 661, 200) : undefined}
-      className={`rounded-[18px] border border-border bg-surface p-5 ${desktop ? "" : "mt-4"}`}
-    >
-      <div className="flex items-center gap-2 text-ink">
-        <Info className="size-4" strokeWidth={1.6} />
-        <h2 className="text-[14px]">About these answers</h2>
-      </div>
-      <p className="mt-2 text-[11px] leading-[1.55] text-ink-faint">
-        {body} The same question always returns the same response, which makes the prototype
-        predictable while the backend is being built.
       </p>
     </div>
   );
@@ -727,7 +770,7 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
       )}
 
       <div
-        style={desktop ? pos(true, 119, 112, 1040, 96) : undefined}
+        style={desktop ? pos(true, CONTENT_X, 137, 1040, 96) : undefined}
         className={desktop ? "" : "mt-6 pr-[164px]"}
       >
         <h1
@@ -737,11 +780,6 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
         >
           Ask HAQI
         </h1>
-        <p className="mt-1 text-[17px] leading-[1.45] text-ink-soft">
-          {desktop
-            ? "Ask about the air around you. Answers are clear, sourced from demo data, and easy to check."
-            : "Clear answers about the air around you, built from demo data."}
-        </p>
       </div>
 
       <button
@@ -773,18 +811,16 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
           )}
 
           <div
-            style={desktop ? pos(true, 1227, 300, 661, 300) : undefined}
+            style={desktop ? pos(true, RAIL_X, 300, 661, 300) : undefined}
             className={desktop ? "" : "mt-4"}
           >
             {composer("Ask a follow-up")}
           </div>
-
-          <DemoNote desktop={desktop} variant="answer" />
         </>
       ) : (
         <>
           <div
-            style={desktop ? pos(true, 119, 250, 1728, 560) : undefined}
+            style={desktop ? autoPos(true, CONTENT_X, CARD_TOP, CONTENT_W, 560) : undefined}
             className={
               desktop ? "grid grid-cols-4 gap-6" : "mt-6 grid gap-4 min-[700px]:grid-cols-2"
             }
@@ -795,13 +831,11 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
           </div>
 
           <div
-            style={desktop ? pos(true, 119, 840, 1728, 240) : undefined}
+            style={desktop ? pos(true, CONTENT_X, COMPOSER_TOP, CONTENT_W, 240) : undefined}
             className={desktop ? "" : "mt-4"}
           >
             {composer()}
           </div>
-
-          <DemoNote desktop={desktop} variant="welcome" />
         </>
       )}
     </div>

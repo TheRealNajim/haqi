@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import {
-  Map as MapIcon,
-  MessageCircle,
-  BadgeQuestionMark,
-  Database,
-  Settings,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Map as MapIcon, MessageCircle, BadgeQuestionMark, X, type LucideIcon } from "lucide-react";
 
 import worldMap from "@/assets/world-map.jpg";
 import { AppHeader, type HeaderFilterKey } from "@/components/AppHeader";
@@ -275,20 +267,6 @@ export function HomePage() {
           {navHover.label}
         </div>
       )}
-      <button
-        aria-label="Data"
-        style={canvasPosition(true, 29, 1160, 64, 64)}
-        className="z-20 flex items-center justify-center rounded-[10px] bg-surface text-ink"
-      >
-        <Database className="size-[26px]" strokeWidth={1.4} />
-      </button>
-      <button
-        aria-label="Settings"
-        style={canvasPosition(true, 29, 1229, 64, 64)}
-        className="z-20 flex items-center justify-center rounded-[10px] bg-surface/60 text-ink-faint"
-      >
-        <Settings className="size-[26px]" strokeWidth={1.4} />
-      </button>
     </>
   ) : null;
 

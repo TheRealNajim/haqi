@@ -13,6 +13,16 @@ export type HeaderFilters = {
 
 export type HeaderFilterKey = keyof HeaderFilters;
 
+type HeaderNotification = {
+  id: string;
+  message: string;
+  read: boolean;
+};
+
+const INITIAL_NOTIFICATIONS: HeaderNotification[] = [
+  { id: "flood-egypt", message: "Flood risk increased in Egypt Operations.", read: false },
+];
+
 const FILTER_KEYS: HeaderFilterKey[] = ["region", "country", "area", "riskType"];
 
 const FILTER_WIDTHS: Record<HeaderFilterKey, number> = {
@@ -46,12 +56,18 @@ export function AppHeader({
   onFilterChange,
 }: AppHeaderProps) {
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<HeaderNotification[]>(INITIAL_NOTIFICATIONS);
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem("haqi-theme");
     const next = stored ? stored === "dark" : false;
     document.documentElement.classList.toggle("dark", next);
     return next;
   });
+
+  const unreadCount = notifications.filter((item) => !item.read).length;
+
+  const markAllRead = () =>
+    setNotifications((items) => items.map((item) => ({ ...item, read: true })));
 
   const toggleTheme = () => {
     setDark((prev) => {
@@ -146,15 +162,49 @@ export function AppHeader({
               className="relative flex h-full w-full items-center justify-center rounded-[10px] bg-surface text-ink"
             >
               <Bell className="size-5" strokeWidth={1.4} />
-              <span
-                className={`absolute size-2 rounded-full bg-risk-red ${
-                  desktop ? "right-3 top-2" : "right-2.5 top-2"
-                }`}
-              />
+              {unreadCount > 0 && (
+                <span
+                  className={`absolute size-2 rounded-full bg-risk-red ${
+                    desktop ? "right-3 top-2" : "right-2.5 top-2"
+                  }`}
+                />
+              )}
             </button>
             {notifOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-[12px] bg-surface p-4 text-[14px] text-ink-soft shadow-[var(--shadow-soft)]">
-                Flood risk increased in Egypt Operations.
+              <div className="absolute left-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-[12px] bg-surface p-4 text-[14px] shadow-[var(--shadow-soft)] min-[900px]:left-auto min-[900px]:right-0">
+                <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
+                  <span className="text-[13px] font-medium text-ink">Notifications</span>
+                  <button
+                    type="button"
+                    onClick={markAllRead}
+                    disabled={unreadCount === 0}
+                    className="rounded-[6px] px-2 py-1 text-[12px] text-ink-soft transition-colors hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 disabled:cursor-default disabled:text-ink-faint disabled:hover:bg-transparent"
+                  >
+                    Mark all as read
+                  </button>
+                </div>
+                <ul className="mt-3 space-y-2.5">
+                  {notifications.map((notification) => (
+                    <li key={notification.id} className="flex items-start gap-2.5">
+                      <span
+                        aria-hidden="true"
+                        className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                          notification.read ? "bg-border" : "bg-risk-red"
+                        }`}
+                      />
+                      <span
+                        className={`leading-[1.45] ${
+                          notification.read ? "text-ink-faint" : "text-ink-soft"
+                        }`}
+                      >
+                        {notification.message}
+                        <span className="sr-only">
+                          {notification.read ? " (read)" : " (unread)"}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>

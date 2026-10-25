@@ -56,6 +56,8 @@ _ACTIVITY_WORDS = {
 }
 
 _TIME_RE = re.compile(r"(\d{1,2})([:.]?)(\d{2})?\s*(am|pm)?", re.I)
+_NOON_RE = re.compile(r"\b(noon|midday)\b", re.I)
+_MIDNIGHT_RE = re.compile(r"\bmidnight\b", re.I)
 
 
 def parse_question(question: str) -> dict:
@@ -80,6 +82,17 @@ def parse_question(question: str) -> dict:
             break
     m = _TIME_RE.search(q)
     now = datetime.now()
+    if not m and (_NOON_RE.search(q) or _MIDNIGHT_RE.search(q)):
+        # named times carry real meaning; digits never parsed them
+        hh = 12 if _NOON_RE.search(q) else 0
+        window_dt = now.replace(hour=hh, minute=0, second=0, microsecond=0)
+        if window_dt < now:
+            window_dt += timedelta(days=1)
+        return {
+            "activity": activity,
+            "time_hh": window_dt.hour,
+            "time_desc": window_dt.strftime("%I%p").lstrip("0").lower(),
+        }
     if m:
         hh = int(m.group(1))
         mm = int(m.group(3)) if m.group(3) else None

@@ -38,3 +38,56 @@ backend agent can repeat it blind.
 ## Never
 Commit or print secrets. Let Zetaris's platform .env anywhere near git. Register the
 Lightning data-source tables before the build window opens (Oct 22) - prepare recipes only.
+
+## MESSAGE TO INFRA AGENT (from backend lead, Oct 25)
+
+Big milestone: **the backend is LIVE in production on Render free tier** —
+https://haqi-api.onrender.com (/health verified 200, /today returns the real
+Lagos verdict with live keys). Deployment ran from the repo's render.yaml;
+keys live in the Render dashboard, never git. Your flow changes accordingly:
+
+1. **Your .env.example is missing the backend's live env rows** (the file on
+   your branch only carries OPENAQ/WAQI/Zetaris/MODEL_*). Copy from
+   `backend/.env.example` on main — it now has: `OPENWEATHER_API_KEY`,
+   `NASA_FIRMS_MAP_KEY`, `BRIGHTDATA_API_KEY`, `BRIGHTDATA_SERP_ZONE`,
+   `HAQI_LOCATION_NAME`, `HAQI_DATA_DIR`, `HAQI_CORS_ORIGINS`. These names are
+   already contract v1.2+; only your file lags. One canonical example file,
+   no drift.
+2. **Deliver keys to the Render dashboard, not to chat.** The runbook's
+   "values handed to the backend lead" gate is superseded: every env you want
+   live gets pasted into Render's Environment table (I'll tell you which are
+   missing; /sources/status tells you — Pollen is Europe-only BY DESIGN,
+   Advisory = missing BRIGHTDATA_API_KEY, Zetaris = recipes pending).
+3. **Zetaris is the next real unlock.** Your Oct 25 PASS run matches our
+   verified REST contract exactly. Two things from you:
+   a. **a long-lived API key** from the Zetaris admin (the admin idToken
+      expires — our adapter is ready but a static key + your created table
+      recipe is what makes it production-safe);
+   b. **the table recipe** after you register the Lagos/NY data source:
+      table name + the column order your view produces. Our adapter
+      (`backend/app/adapters/zetaris.py` on main) maps rows exactly as
+      `[source_id, value, unit, distance_km, observed_at_iso]` and QUARANTINES
+      anything malformed visibly. Align your sample view to that shape and
+      both sides are done without more code.
+   Then `ZETARIS_REST_URL` / `ZETARIS_API_KEY` go into the Render dashboard
+   and the slot arms live.
+4. **Nemotron route: use NVIDIA hosted (build.nvidia.com), not Meterless** —
+   your PC has no dedicated GPU (Iris Xe) and the hosted route needs no local
+   stack. Fill the three MODEL_* rows (same values from ONE route), paste
+   `MODEL_BASE_URL` + `MODEL_API_KEY` into Render, and the agent's parse step
+   upgrades itself without deploy-side changes (keyed client is lazy-init).
+5. **Runbook facts that went stale on main — fix in your pass:**
+   - "smoke_test.py loads it via python-dotenv" — we have an own zero-dep
+     loader now; python-dotenv is NOT a dependency anymore.
+   - "expect PASS PASS PASS" — smoke_test.py was split: LOCAL checks must be
+     6x PASS offline; INFRA checks report SKIP (exit 0) while envs are unset
+     and only FAIL when configured-but-broken. Your final gate is: 6 PASS +
+     Zetaris/Nemotron slots `configured: true` on /sources/status.
+6. **Your branch is 8 commits behind main** (render.yaml, CORS, API note,
+   AGENTS untouched by us beyond this message). Rebase onto main before your
+   next push:
+   `git fetch && git rebase origin/main`
+
+The honest deploy state we want from you is simple: **POST to
+/sources/status shows every disclosed slot either configured:true or an
+explicitly environmental blind (Pollen's Europe scope). Nothing else.**

@@ -113,13 +113,10 @@ export function WhyPage({ desktop, onViewFullMap }: WhyPageProps) {
   return (
     <div className={desktop ? "contents" : "relative"}>
       <div
-        style={desktop ? pos(true, 119, 112, 1040, 96) : undefined}
+        style={desktop ? pos(true, 119, 137, 1040, 96) : undefined}
         className={desktop ? "" : "mt-6"}
       >
         <h1 className="font-display text-[42px] leading-[1.2] tracking-[-0.01em] text-ink">Why?</h1>
-        <p className="mt-1 text-[17px] leading-[1.45] text-ink-soft">
-          Follow the evidence behind today&apos;s answer — including what the demo could not check.
-        </p>
       </div>
 
       <button

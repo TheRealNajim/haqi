@@ -36,3 +36,34 @@ against fixtures/ before the backend exists.
 ## Definition of done (by Oct 21)
 All three screens render from fixtures at 360px width, offline. Zero backend dependency.
 Report blockers per the format in the root file.
+
+## MESSAGE TO FRONTEND AGENT (from backend lead, Oct 25)
+
+Backend is live and judge-ready. Point the app at it:
+
+1. **Base URL: https://haqi-api.onrender.com** — free-tier Render, keep-warmed.
+   Endpoints: `GET /today` (Lagos verdict), `GET /ask?q=...&profile=asthma`
+   (returns same Verdict shape), `GET /why/{ledger_id}` (evidence graph),
+   `GET /sources/status`, `GET /health`. Full field-by-field contract with
+   copy rules: **`API_INTEGRATION.md` at repo root — read that first.**
+2. **Wire src/data/ask.ts to the real API.** It is still fixtures-only; that
+   was one of the two reasons live data didn't show. Swap `askHaqi` for the
+   fetch layer; keep the fixtures import behind the FIXTURES switch you
+   already planned — it stays the offline dev mode AND the fallback renderer.
+3. **Send your deployed Vercel URL to the backend lead** — it must be added to
+   the API's `HAQI_CORS_ORIGINS` in the Render dashboard before the deployed
+   app can call it, else browsers block the call. Local dev (vite 5173) is
+   already allowed; deployed origins are not yet.
+4. **`"fallback": true` in a Verdict = labeled fixture/synthetic data served
+   because a live source was unreachable.** Style it as an honest demo-data
+   banner per `API_INTEGRATION.md` — never render it as if it were live.
+5. **Known honest blind slots (NOT bugs):** Bright Data advisory key is
+   pending (their site was down), Zetaris waits on infra recipes, Pollen is
+   Europe-only by design (**Lagos is our pilot and gets a disclosed blind**).
+   Render the blind-spot notes as disclosure chips, not error toasts.
+6. **Win `at Xpm` (future hour) verdicts may arrive with `"aqi": null` and a
+   careful level + "come back nearer the time" reason when the plan is >3h
+   out — that is the product's honesty promise, not a missing-data bug.**
+   Do not retry-loop these; they are final answers.
+
+Ask questions in this file or message the coordinator — backend answers here.

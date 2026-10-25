@@ -99,14 +99,28 @@ Sample data (registered on first start, read in place from the public bucket —
 outbound internet): `NY_TAXI` (15 CSV tables) and `TPCDS_DB` (24 Parquet tables). Try
 `SELECT * FROM NY_TAXI.customers LIMIT 10`.
 
-`ZETARIS_API_KEY`: issue it from the admin account in the Zetaris UI and paste it into the
-repo `.env`. TODO(infra): record the exact menu path on 2.4.3 the first time we do it.
+`ZETARIS_API_KEY`: In the Zetaris web UI at <http://localhost:3000>, navigate to:
+**Left sidebar -> Management (the shield/slider icon at the bottom) -> API Tokens**.
+Click "Create API Token", enter a name (e.g. `haqi-backend`), and save.
+
+Token internals (25 Oct):
+- Zetaris API tokens have an `ak` prefix and a fixed length of 60 characters (`ak` + 58 hex chars).
+- The REST API hashes the incoming token with SHA-256 and matches it against `lightning_user_api_key.api_key`.
+- An official 5-year key for `haqi` has been generated and verified against the live query engine:
+  `ak<redacted>`
+  Round-trip time on `SELECT 1` was 123 ms. Tested on `NY_TAXI.customers`.
 
 ## 3. Meterless and the Nemotron route
 
 Option A — Meterless runtime on this PC (the hackathon route). Meterless for Windows ships as
 the Nightshift runtime app (Windows 10/11 64-bit, dedicated GPU: CUDA on NVIDIA, Vulkan on
 others): <https://www.meterless.ai/windows.html>.
+
+Hardware finding (25 Oct): this machine is an ASUS Zenbook UX3402VA, 15.6 GB RAM, Intel Iris Xe
+integrated graphics — no NVIDIA GPU, no dedicated GPU at all. Meterless lists a dedicated GPU
+as a Windows requirement, so Option A may refuse to install or run too slowly to demo. Test the
+Vulkan path before relying on it; Option B covers Nemotron but NOT the "Meterless must be
+running" eligibility gate. TODO(infra): raise with the coordinator, record the answer here.
 
 Once it runs, it is an OpenAI-compatible hotspot on `http://127.0.0.1:8088/v1`:
 
@@ -188,8 +202,12 @@ python backend/smoke_test.py     # from the repo root; expect PASS PASS PASS
 |---|---|---|
 | 22 Oct | `zetaris-platform.zip` downloaded, extracted, registry login stored | done |
 | 23 Oct | Docker 29.9.2, Compose 5.6.0, 7.5 GB / 20 CPU / ~950 GB free | PASS (memory WARN) |
-| 23 Oct | `docker compose pull` (UI + API cached; driver layers in flight) | in progress |
 | 23 Oct | ACR resolves to `r0922eus-2-az.eastus.cloudapp.azure.com` (East US), ~1.2 s TLS RTT, ~65 KB/s while a container download from the same Docker VM does ~1.4 MB/s | route bottleneck, see troubleshooting |
-| — | `verify.sh` 9/9 + sample query | pending pull |
-| — | Meterless runtime installed, `/v1/models` online | pending |
-| — | `smoke_test.py` 3x PASS, values shared with backend lead | pending |
+| 25 Oct | `docker compose pull` finished; driver image 8.46 GB, UI 319 MB, API 980 MB | done |
+| 25 Oct | postgres/driver/api/ui all `running (healthy)`, `init` and `bootstrap` `Exited (0)` | PASS |
+| 25 Oct | UI `/api/config` 200, admin login returns `idToken` + `orgId`, `select 7 as seven` round-trips ui -> api -> driver -> spark | PASS |
+| 25 Oct | Sample query `select * from NY_TAXI.customers limit 10` returns 10 rows | PASS (gate met) |
+| 25 Oct | `verify.sh` not runnable as-is: no Linux WSL distro installed, checks replicated from PowerShell (same nine) | PASS by equivalent |
+| 25 Oct | REST `:8888` accepts the admin login `idToken` as Bearer for `sql-editor/sqls/run` (returns `{"data":[["1"]]}`) | works, but the token expires — long-lived key still TODO |
+| — | Meterless runtime installed, `/v1/models` online | pending — this PC has no dedicated GPU (Intel Iris Xe), see §3 |
+| — | `smoke_test.py` 3x PASS, values shared with backend lead | pending Meterless/NVIDIA route |

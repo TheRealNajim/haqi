@@ -1,28 +1,35 @@
 -- Read-only inspection of the local Zetaris install.
--- Run one statement at a time through the SQL editor (UI :3000) or the REST API (:8888).
+-- Run one statement per request: the SQL editor splits on semicolons.
 -- The parser is strict: an unknown shape returns an empty 400, not a helpful error.
 
 -- Databases registered in this install.
+-- HAQI (815) holds our sources; NY_TAXI (6) and TPCDS_DB (307) are samples.
 SHOW LIGHTNING DATABASES;
 
--- Tables inside one database, with their provider and storage format.
-SHOW LIGHTNING TABLES NY_TAXI;
+-- Tables inside one database, with provider and format. AIR_QUALITY shows as table_type=rest.
+SHOW LIGHTNING TABLES HAQI;
 
--- Same set, alternative shape: fully qualified identifiers only.
-SHOW TABLES IN NY_TAXI;
+-- Fully qualified identifiers only.
+SHOW TABLES IN HAQI;
 
--- Columns of one table: col_name | data_type | comment.
-DESCRIBE NY_TAXI.customers;
+-- REST tables infer their columns from the JSON response; this one is a nested struct.
+DESCRIBE HAQI.AIR_QUALITY;
 
--- Column names only.
-SHOW COLUMNS IN NY_TAXI.customers;
+-- The published recipe: a view shaped to the backend contract.
+DESCRIBE haqi_views.air_quality_readings;
 
--- Non-Lightning sources. Empty on a fresh install; sample data is filestore only.
+-- What the backend will run. Expect one row, observed_at within the hour.
+SELECT source_id, raw_value, unit, distance_km, observed_at
+FROM haqi_views.air_quality_readings;
+
+-- Views registered in this organisation.
+SHOW DATASOURCE VIEWS;
+
+-- External JDBC sources. Empty here; REST sources do not appear in this list.
 SHOW DATASOURCES;
 
--- After a recipe lands, this must return rows whose observed_at is recent.
--- Replace HAQI.AIR_QUALITY with the registered name.
--- SELECT source_id, raw_value, unit, distance_km, observed_at
--- FROM HAQI.AIR_QUALITY
--- ORDER BY observed_at DESC
--- LIMIT 10;
+-- Preview any new endpoint before creating an object (read-only, nothing persisted).
+-- TEST REST REQUEST (
+--   endpoint 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=6.5244&longitude=3.3792&current=pm2_5&timezone=UTC',
+--   method 'GET', http_encoding 'URLENCODED', response_type 'JSON', insecure_ssl 'false'
+-- ) HEADER () BODY ()

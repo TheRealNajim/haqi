@@ -240,7 +240,8 @@ powershell -ExecutionPolicy Bypass -File infra\healthcheck.ps1
 It is read-only and exits non-zero if anything required is down. It checks: Docker engine,
 the four Zetaris services and their health, the two one-shot jobs (`init`, `bootstrap` must
 be `exited 0`, not running), UI `/api/config`, a real `SELECT 1` through REST with the API
-key from `.env`, and the Meterless hotspot plus `/v1/models`. Secrets are read from `.env`
+key from `.env`, the published recipe (`haqi_views.air_quality_readings`) returning a fresh
+contract row, and the Meterless hotspot plus `/v1/models`. Secrets are read from `.env`
 and never printed. Sample output on a good day:
 
 ```
@@ -249,6 +250,7 @@ and never printed. Sample output on a good day:
   PASS  init: completed (exit 0)     PASS  bootstrap: completed (exit 0)
   PASS  ui: /api/config 200
   PASS  zetaris rest: SELECT 1 -> 1
+  PASS  recipe: haqi_views.air_quality_readings -> 15.0 ugm3, 0.6 h old
   PASS  meterless: /healthz http://127.0.0.1:8088
   PASS  meterless: /v1/models 73 ids
   WARN  model route: meterless/auto has no provider - product answers fall back to the deterministic path
@@ -285,17 +287,19 @@ root and holding the Docker socket is enough.
 
 ### The recipe gate
 
-Zetaris is verified, but the backend still cannot use it: `backend/app/adapters/zetaris.py`
-raises until infra publishes a table whose first five columns are
-`source_id, raw_value, unit, distance_km, observed_at`. `infra/zetaris/README.md` records
-what is registered, what the engine supports, and the exact questions blocking a REST table.
-Once a table exists:
+Closed for one source on 25 Oct. The backend adapter raises until infra publishes a queryable
+name whose first five columns are `source_id, raw_value, unit, distance_km, observed_at`.
+That name is now **`haqi_views.air_quality_readings`** — a schema-store view over the Lightning
+REST table `HAQI.AIR_QUALITY` (Open-Meteo air quality, Lagos point, keyless, hourly).
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File infra\zetaris\check-recipe.ps1 -Table HAQI.AIR_QUALITY
+powershell -ExecutionPolicy Bypass -File infra\zetaris\check-recipe.ps1 -Table haqi_views.air_quality_readings
+# PASS  haqi_views.air_quality_readings matches the adapter row contract.
 ```
 
-Exit 0 means the recipe is publishable; the rules themselves are proven by `-SelfTest`.
+`infra/zetaris/README.md` has the exact DDL, the live output, and the remaining gaps (PM2.5
+only; WAQI/OpenAQ/OpenWeather/FIRMS wait on their API keys). The rules themselves are proven by
+`-SelfTest`, which needs no network.
 
 ## 7. Backup and recovery
 
@@ -379,10 +383,12 @@ docker compose up -d
 | 25 Oct | Ubuntu user `najim` (docker group, no sudo) created and made the default; `docker`/`compose` work without root | done |
 | 25 Oct | Docker Desktop `AutoStart` set to `true`; engine and all four services return after a restart | PASS |
 | 25 Oct | Nightshift startup shortcut created; runtime still needs its token copied into `.env` after each start | done |
-| 25 Oct | `infra/healthcheck.ps1`: 11 pass + 1 WARN (no model provider), no secrets printed | PASS |
+| 25 Oct | `infra/healthcheck.ps1`: 12 pass + 1 WARN (no model provider), no secrets printed | PASS |
 | 25 Oct | `infra/zetaris/check-recipe.ps1`: 5 self-tests pass; live DESCRIBE against `NY_TAXI.customers` correctly rejected | PASS (no recipe yet) |
 | 25 Oct | Confirmed grammar: `SHOW LIGHTNING DATABASES`, `SHOW LIGHTNING TABLES <DB>`, `SHOW TABLES IN <DB>`, `DESCRIBE <DB>.<TABLE>`; metastore has 0 REST tables, 0 datasources | recorded in `infra/zetaris/README.md` |
-| 25 Oct | REST table registration path unproven: no UI wizard in this bundle, `CREATE LIGHTNING REST TABLE` rejected (empty 400), no OpenAPI | BLOCKED — question sent to coordinator |
+| 25 Oct | REST table registration path unproven in the bundle (no UI wizard, no OpenAPI); vendor command reference documents it | resolved same day |
+| 25 Oct | `CREATE LIGHTNING DATABASE HAQI`, `CREATE LIGHTNING REST TABLE AIR_QUALITY`, `CREATE SCHEMASTORE VIEW air_quality_readings` via SQL editor | PASS — live |
+| 25 Oct | Recipe `haqi_views.air_quality_readings` returns the 5 contract columns in order; Open-Meteo PM2.5 15.0 ugm3, `observed_at` 15:00Z | PASS, checker exit 0 |
 | 25 Oct | `infra/backup.ps1` wrote dumps and restored both into throwaway databases, row counts matched | PASS (first drill, 185 + 10 tables) |
 | 25 Oct | UI was bound to `0.0.0.0:3000`; pinned to `127.0.0.1:3000` via `UI_PORT` in the platform `.env` | fixed, `verify.sh` 9/9 after |
 | 25 Oct | `verify.sh` run as the non-root `najim` user after the change | PASS 9/9 |

@@ -4,9 +4,12 @@ Owner: infra lead. Everything here is a manual step: if it is not written down, 
 happen. The gate this runbook exists to clear (infra/AGENTS.md):
 
 - Zetaris platform running on Docker Desktop, `verify.sh` 9/9, sample query returns rows
-- Meterless runtime running, OpenAI-compatible endpoint answering
-- One Nemotron route: all three `MODEL_*` values from the same place
-- `backend/smoke_test.py` = 3x PASS, values handed to the backend lead
+- Meterless runtime running, OpenAI-compatible endpoint answering (eligibility, even though the
+  product answers come from NVIDIA — see §3)
+- One Nemotron route: **NVIDIA hosted** supplies all three `MODEL_*` values
+- `backend/smoke_test.py`: 6 LOCAL PASS offline; INFRA Zetaris and Nemotron PASS once configured
+  (they report SKIP, not FAIL, while unset)
+- Env values reach the deployed API through the **Render dashboard**, never chat or git
 
 Last verified state: see [Status](#status) at the bottom. Update it every session.
 
@@ -148,12 +151,11 @@ Installed and running (25 Oct):
   `400 no_provider_configured` — "Add a cloud key in Setup or install/start a local model".
   So the runtime is up, but it has no engine behind the route.
 
-BLOCKER, needs a human decision (infra-only cannot fix it): a cloud key (Meterless credit or
-build.nvidia.com) or a local model download is required before `meterless/auto` can answer.
-Eligibility wording says the product must run on Nemotron via Meterless OR the NVIDIA key, while
-the gate also says Meterless must be running. The runtime now satisfies "running"; the provider
-question decides whether `NEMOTRON_MODEL` is `meterless/auto` (Meterless credit) or
-`nvidia/nemotron-3-super-120b-a12b` (Option B). Pick one, never mix them.
+Decision taken 25 Oct (backend lead): the product answers run on **NVIDIA hosted**
+(build.nvidia.com), not Meterless. This PC has no dedicated GPU, so a hosted route is the
+honest one; Meterless cannot serve it anyway — none of its 73 ids is `nvidia/nemotron-*`.
+Meterless stays installed and running only because eligibility requires it running during the
+event. Never mix: all three `MODEL_*` values come from the NVIDIA route below.
 
 Runtime checks:
 
@@ -176,7 +178,9 @@ curl -s -X POST http://127.0.0.1:8088/v1/chat/completions \
   `meterless-scope: user` on chat calls.
 - Auto-detect scans ports 8088, 8090, 8787, 11434 on localhost.
 
-Option B — build.nvidia.com key, if Meterless cannot serve Nemotron:
+### The route we use — NVIDIA hosted (build.nvidia.com)
+
+Create a key at build.nvidia.com, then set all three rows together:
 
 ```
 MODEL_BASE_URL=https://integrate.api.nvidia.com/v1
@@ -187,19 +191,45 @@ NEMOTRON_MODEL=nvidia/nemotron-3-super-120b-a12b
 ## 4. Repo `.env` (never committed)
 
 ```bash
-cp .env.example .env      # repo root; backend/smoke_test.py loads it via python-dotenv
+cp .env.example .env      # repo root; the backend loads it with its own zero-dependency loader
 ```
 
+- `backend/app/main.py` parses `.env` itself. `python-dotenv` is **not** a dependency — do not
+  add it to `requirements.txt` to "fix" a missing value.
+- Root `.env.example` is canonical: every adapter key plus the `MODEL_*` route. `backend`'s
+  file carries the same names because Render builds with `rootDir: backend`.
 - Names are fixed by `docs/CONTRACTS.md`; renaming or adding one is a contract change.
-- `ZETARIS_BASE_URL` is optional and defaults to `http://localhost:3000` (used by the smoke
-  test only).
 - Fill values, never commit `.env` (gitignore already covers it), never print secrets.
 
-Pre-flight once Zetaris + the model route are up:
+### Local pre-flight
 
 ```bash
-python backend/smoke_test.py     # from the repo root; expect PASS PASS PASS
+python backend/smoke_test.py     # from the repo root
 ```
+
+`smoke_test.py` is split so nobody is blocked:
+
+| Block | Expectation |
+|---|---|
+| LOCAL (6 PASS lines) | always pass on a clean machine, no infra needed |
+| INFRA Zetaris SQL over REST | SKIP while `ZETARIS_*` is unset; PASS once set |
+| INFRA Nemotron replies | SKIP while `MODEL_*` is unset; PASS once the NVIDIA route works |
+
+Exit 0 unless an INFRA check is configured and broken. The real gate is not "everything PASS" —
+it is `POST /sources/status` showing the Zetaris and Nemotron slots as `configured: true`, with
+every other slot either configured or an explicit environmental blind.
+
+### Delivering values to the deployed API
+
+The backend runs at `https://haqi-api.onrender.com` (Render free tier, `rootDir: backend`).
+Keys go in **Render → haqi-api → Environment**, never chat and never a commit:
+
+- `backend/.env.example` and `render.yaml` list the names; `sync: false` makes Render ask for
+  each value when the blueprint applies.
+- Render cannot reach this PC. `ZETARIS_REST_URL=http://localhost:8888/api/v1.0` is dead from
+  Render until there is a tunnel (Tailscale/Cloudflare) or Zetaris lives somewhere reachable.
+  Do not paste it into the dashboard and call the slot armed.
+- Free-tier disk is ephemeral: `HAQI_DATA_DIR` (the trust ledger) does not survive a redeploy.
 
 ## 5. Ports (infra documents reality)
 
@@ -270,10 +300,10 @@ Autostart after a reboot (verified 25 Oct):
 - Meterless: `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Nightshift Runtime.lnk`
   launches `meterless-runtime.exe`, which starts `meterlessd`. It takes a few seconds after
   login, so the first health check may be too early.
-- The runtime token is regenerated when the daemon restarts, at
-  `%LOCALAPPDATA%\ai.meterless.runtime\proxy-token`. `MODEL_API_KEY` in `.env` must be
-  updated after every runtime restart or `/v1/models` answers `401` and healthcheck says
-  "token rejected". Copy the value, do not paste it anywhere else.
+- The runtime token lives at `%LOCALAPPDATA%\ai.meterless.runtime\proxy-token`. It is created
+  on first install and **survives restarts** — measured 25 Oct across a kill + relaunch, same
+  hash, `/v1/models` 200 with the old value. Copy it once into `MODEL_API_KEY`; re-copy only if
+  the runtime is reinstalled or the file is deleted.
 
 WSL user: `najim` (uid 1000, member of `docker` only, no sudo) is the default for
 `wsl -d Ubuntu`, set in `/etc/wsl.conf`. Run the vendor scripts as that user:
@@ -382,7 +412,9 @@ docker compose up -d
 | 25 Oct | `chat/completions` on `meterless/auto`: 400 "No provider is configured" | FAIL — needs cloud key or local model, see §3 |
 | 25 Oct | Ubuntu user `najim` (docker group, no sudo) created and made the default; `docker`/`compose` work without root | done |
 | 25 Oct | Docker Desktop `AutoStart` set to `true`; engine and all four services return after a restart | PASS |
-| 25 Oct | Nightshift startup shortcut created; runtime still needs its token copied into `.env` after each start | done |
+| 25 Oct | Nightshift startup shortcut created at `%APPDATA%\...\Startup\Nightshift Runtime.lnk` | done |
+| 25 Oct | Restart drill: killed `meterlessd` + the `:8088` node process, relaunched the shortcut target — `/healthz` ok in 3 s, `/v1/models` 73 ids | PASS |
+| 25 Oct | Token check across that restart: `proxy-token` hash unchanged (`9DB3798C`), still valid | PASS — token does **not** rotate |
 | 25 Oct | `infra/healthcheck.ps1`: 12 pass + 1 WARN (no model provider), no secrets printed | PASS |
 | 25 Oct | `infra/zetaris/check-recipe.ps1`: 5 self-tests pass; live DESCRIBE against `NY_TAXI.customers` correctly rejected | PASS (no recipe yet) |
 | 25 Oct | Confirmed grammar: `SHOW LIGHTNING DATABASES`, `SHOW LIGHTNING TABLES <DB>`, `SHOW TABLES IN <DB>`, `DESCRIBE <DB>.<TABLE>`; metastore has 0 REST tables, 0 datasources | recorded in `infra/zetaris/README.md` |
@@ -393,3 +425,8 @@ docker compose up -d
 | 25 Oct | `infra/backup.ps1` wrote dumps and restored both into throwaway databases, row counts matched | PASS (first drill, 185 + 10 tables) |
 | 25 Oct | UI was bound to `0.0.0.0:3000`; pinned to `127.0.0.1:3000` via `UI_PORT` in the platform `.env` | fixed, `verify.sh` 9/9 after |
 | 25 Oct | `verify.sh` run as the non-root `najim` user after the change | PASS 9/9 |
+| 25 Oct | `feat/infra-env-example` rebased onto `origin/main` (`c1bea7c`), 14 commits, clean; safety branch `backup/pre-rebase-20261025` | PASS, not pushed |
+| 25 Oct | `smoke_test.py` after the rebase: 6 LOCAL PASS, Zetaris PASS, Nemotron FAIL `no_provider_configured` | expected until the NVIDIA key lands |
+| 25 Oct | Root `.env.example` reconciled with `backend/.env.example`: `HAQI_CORS_ORIGINS`, `HAQI_LOCATION_NAME`, `BRIGHTDATA_SERP_ZONE`, `HAQI_DATA_DIR` present; NVIDIA route spelled out | done — names now match contract v1.2+ |
+| 25 Oct | Runbook corrected: own `.env` loader (no python-dotenv), split smoke-test expectations, NVIDIA route decided, Render dashboard as the delivery path | done |
+| 25 Oct | Backend lead's message commit (`c1bea7c`) read: Render is live, NVIDIA hosted is the route, keys go to the dashboard | acted on |

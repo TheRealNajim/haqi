@@ -57,12 +57,22 @@ class WeatherAdapter(BaseAdapter):
         if target_hour is not None:
             local = datetime.now()  # device-local (kid's wall-clock)
             target = local.replace(hour=max(0, min(target_hour, 23)), minute=0,
-                                  second=0, microsecond=0)
+                                   second=0, microsecond=0)
             if target < local:
                 target += timedelta(days=1)
+            # hard ceiling regardless of step availability: OpenWeather ships
+            # 3-hourly steps for days, but our verdict contract only claims a
+            # 3h horizon — a step existing is NOT the same as its being covered
+            if target - local > timedelta(hours=self.FORECAST_HOURS + 1):
+                raise AdapterError(
+                    "openweather: no forecast step covers that time yet — "
+                    "horizon is 3 hours ahead"
+                )
+            # step dts are UTC-aware; compare on the same clock
+            tgt_utc = target.astimezone(timezone.utc)
             window = [s for s in steps
-                      if self._step_dt(s) <= target + timedelta(hours=2)
-                      and self._step_dt(s) >= target - timedelta(hours=1)]
+                      if self._step_dt(s) <= tgt_utc + timedelta(hours=2)
+                      and self._step_dt(s) >= tgt_utc - timedelta(hours=1)]
             if not window:
                 raise AdapterError(
                     "openweather: no forecast step covers that time yet — "

@@ -82,6 +82,18 @@ def parse_question(question: str) -> dict:
             break
     m = _TIME_RE.search(q)
     now = datetime.now()
+    m_rel = re.search(r"in\s+(\d{1,2})\s*(hours?|hrs?)\b", q)
+    if m_rel:
+        # "in 2 hours" is a relative offset, not the 2 o'clock slot; the bare
+        # hour reading that branch used to return was off by ~7 hours
+        n = int(m_rel.group(1))
+        if 1 <= n <= 12:
+            window_dt = now + timedelta(hours=n)
+            return {
+                "activity": activity,
+                "time_hh": window_dt.hour,
+                "time_desc": window_dt.strftime("%I%p").lstrip("0").lower(),
+            }
     if not m and (_NOON_RE.search(q) or _MIDNIGHT_RE.search(q)):
         # named times carry real meaning; digits never parsed them
         hh = 12 if _NOON_RE.search(q) else 0

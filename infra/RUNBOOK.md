@@ -20,14 +20,24 @@ Last verified state: see [Status](#status) at the bottom. Update it every sessio
 | Disk for images | 15 GB free where Docker stores images | ~950 GB — PASS |
 | Architecture | amd64 | x86_64 — PASS |
 
-Windows specifics:
+Windows specifics (as built, 25 Oct):
 
-- Docker Desktop must use the WSL2 backend. `preflight.sh` and `verify.sh` are bash, so run
-  them from a Linux distro, not PowerShell: `wsl --install -d Ubuntu` (once), then open
-  Ubuntu and `cd /mnt/c/.../zetaris-platform`.
-- `docker compose pull/up/ps/logs` work fine from PowerShell; only the two shell scripts need bash.
-- Memory counts what Docker Desktop is allowed to use, not the laptop's RAM:
-  Settings > Resources > Memory.
+- Docker Desktop uses the WSL2 backend, with Ubuntu 26.04.1 LTS registered as the default
+  distro: `wsl --install -d Ubuntu --no-launch`.
+- Docker Desktop's WSL integration for Ubuntu is required. With it off, the `docker` shim
+  inside Ubuntu answers "The command 'docker' could not be found in this WSL 2 distro."
+  Docker Desktop 4.96 has no CLI switch for it: add the distro to
+  `%APPDATA%\Docker\settings-store.json` as `"IntegratedWslDistros": ["Ubuntu"]` and restart
+  Docker Desktop (`docker desktop restart`).
+- A Docker Desktop restart stops the stack for a minute; containers are `restart:
+  unless-stopped` and come back on their own (verified).
+- Run the two shell scripts as root inside Ubuntu, from the bundle path:
+  `wsl -d Ubuntu -u root -- bash -lc 'cd /mnt/c/.../zetaris-platform && ./preflight.sh'`.
+  Repeat `docker login` inside Ubuntu first: preflight reads `$HOME/.docker/config.json`,
+  which is per-user and separate from the Windows credential store.
+- Memory is what Docker Desktop gives its VM. `MemoryMiB` in `settings-store.json` is
+  ignored in 4.96; use Settings > Resources > Memory. At 7.5 GB the gate still passes
+  (WARN, not FAIL).
 
 ## 2. Zetaris install
 
@@ -106,9 +116,9 @@ Click "Create API Token", enter a name (e.g. `haqi-backend`), and save.
 Token internals (25 Oct):
 - Zetaris API tokens have an `ak` prefix and a fixed length of 60 characters (`ak` + 58 hex chars).
 - The REST API hashes the incoming token with SHA-256 and matches it against `lightning_user_api_key.api_key`.
-- An official 5-year key for `haqi` has been generated and verified against the live query engine:
-  `ak<redacted>`
-  Round-trip time on `SELECT 1` was 123 ms. Tested on `NY_TAXI.customers`.
+- A 5-year key for `haqi` has been generated and verified against the live query engine
+  (`SELECT 1` -> 1). It is stored only in the repo `.env` as `ZETARIS_API_KEY`; do not paste it
+  into docs, commits or chat. Regenerate from the same page if it ever leaks.
 
 ## 3. Meterless and the Nemotron route
 
@@ -207,7 +217,10 @@ python backend/smoke_test.py     # from the repo root; expect PASS PASS PASS
 | 25 Oct | postgres/driver/api/ui all `running (healthy)`, `init` and `bootstrap` `Exited (0)` | PASS |
 | 25 Oct | UI `/api/config` 200, admin login returns `idToken` + `orgId`, `select 7 as seven` round-trips ui -> api -> driver -> spark | PASS |
 | 25 Oct | Sample query `select * from NY_TAXI.customers limit 10` returns 10 rows | PASS (gate met) |
-| 25 Oct | `verify.sh` not runnable as-is: no Linux WSL distro installed, checks replicated from PowerShell (same nine) | PASS by equivalent |
-| 25 Oct | REST `:8888` accepts the admin login `idToken` as Bearer for `sql-editor/sqls/run` (returns `{"data":[["1"]]}`) | works, but the token expires — long-lived key still TODO |
-| — | Meterless runtime installed, `/v1/models` online | pending — this PC has no dedicated GPU (Intel Iris Xe), see §3 |
-| — | `smoke_test.py` 3x PASS, values shared with backend lead | pending Meterless/NVIDIA route |
+| 25 Oct | REST `:8888` accepts the admin login `idToken` as Bearer for `sql-editor/sqls/run` — 15-minute lifetime, not usable as a shipped key | fallback only |
+| 25 Oct | Ubuntu 26.04.1 LTS installed as WSL2 distro, set as default, Docker Desktop integration enabled | PASS |
+| 25 Oct | `preflight.sh` inside Ubuntu: 8 PASS + 2 WARN (memory 7 GB, existing `zetaris_pgdata` volume) | PASS |
+| 25 Oct | `verify.sh` inside Ubuntu: 9 checks, 9 pass | PASS — official gate met |
+| 25 Oct | `ZETARIS_API_KEY` (`ak`, 5-year) created in the UI, verified `SELECT 1`, stored only in repo `.env` | done |
+| 25 Oct | `backend/smoke_test.py`: 6 LOCAL PASS, INFRA Zetaris SQL PASS, Nemotron SKIP | partial — no model route yet |
+| 25 Oct | Meterless 1.2.7 installer downloading (624 MB) | in progress — iGPU may not qualify, see §3 |

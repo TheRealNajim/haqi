@@ -127,34 +127,53 @@ the Nightshift runtime app (Windows 10/11 64-bit, dedicated GPU: CUDA on NVIDIA,
 others): <https://www.meterless.ai/windows.html>.
 
 Hardware finding (25 Oct): this machine is an ASUS Zenbook UX3402VA, 15.6 GB RAM, Intel Iris Xe
-integrated graphics — no NVIDIA GPU, no dedicated GPU at all. Meterless lists a dedicated GPU
-as a Windows requirement, so Option A may refuse to install or run too slowly to demo. Test the
-Vulkan path before relying on it; Option B covers Nemotron but NOT the "Meterless must be
-running" eligibility gate. TODO(infra): raise with the coordinator, record the answer here.
+integrated graphics — no NVIDIA GPU, no dedicated GPU at all. The bundled llama.cpp does ship
+Vulkan and CPU backends, so the runtime starts on this PC; expect CPU/Vulkan speed, not the RTX
+figures on the marketing page.
 
-Once it runs, it is an OpenAI-compatible hotspot on `http://127.0.0.1:8088/v1`:
+Installed and running (25 Oct):
+- Nightshift 1.2.7, per-user at `%LOCALAPPDATA%\Nightshift` (unsigned vendor build; SHA-256
+  checked against `APP_BUILD_INFO.txt`). Silent install: `Nightshift_1.2.7_x64-setup.exe /S`.
+- Runtime: `meterless-runtime.exe` starts `meterlessd`; the hotspot answers on
+  `http://127.0.0.1:8088`. It survives closing the window (daemon keeps running).
+- Token file: `%LOCALAPPDATA%\ai.meterless.runtime\proxy-token` (32 chars). The app also shows a
+  connect link (`http://<host>:<port>/connect#k=<key>`). Treat it as a secret.
+- Autostart: the daemon comes up when `meterless-runtime.exe` is launched. After a reboot,
+  start it once (or let Nightshift autostart) before the demo — without it `/healthz` fails and
+  the app silently falls back to the deterministic path.
+- `/v1/models` returned 73 ids, all routing modes (`meterless/auto`, `fast`, `deep`, `cheap`,
+  `local`, `fusion`, `cluster`, `text`, `code`, `vision`, …) — none is `nvidia/nemotron-*`.
+- Chat is NOT wired yet: `POST /v1/chat/completions` answers
+  `400 no_provider_configured` — "Add a cloud key in Setup or install/start a local model".
+  So the runtime is up, but it has no engine behind the route.
+
+BLOCKER, needs a human decision (infra-only cannot fix it): a cloud key (Meterless credit or
+build.nvidia.com) or a local model download is required before `meterless/auto` can answer.
+Eligibility wording says the product must run on Nemotron via Meterless OR the NVIDIA key, while
+the gate also says Meterless must be running. The runtime now satisfies "running"; the provider
+question decides whether `NEMOTRON_MODEL` is `meterless/auto` (Meterless credit) or
+`nvidia/nemotron-3-super-120b-a12b` (Option B). Pick one, never mix them.
+
+Runtime checks:
 
 ```bash
 # is the process up? (does not prove the model route works)
-curl -s http://127.0.0.1:8088/healthz
+curl -s http://127.0.0.1:8088/healthz        # {"status":"ok","engine":"meterless"}
 
 # the real check: 200 with model ids = online, 401/403 = token needed,
 # anything else = offline. Read the ids from here and use one verbatim.
 curl -s -H "Authorization: Bearer <token>" http://127.0.0.1:8088/v1/models
+
+# does it actually generate? this is the check that failed on 25 Oct
+curl -s -X POST http://127.0.0.1:8088/v1/chat/completions \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -H "meterless-app: haqi" -H "meterless-scope: user" \
+  -d '{"model":"meterless/auto","messages":[{"role":"user","content":"Reply: ready"}],"max_tokens":16}'
 ```
 
-- The runtime writes its token to `<stateDir>/proxy-token`; the app also shows it / offers a
-  connect link (`http://<host>:<port>/connect#k=<key>`). Treat it like any other secret.
 - Requests carry `Authorization: Bearer <token>`, `meterless-app: haqi`, and
   `meterless-scope: user` on chat calls.
-- Model ids are routing modes (`meterless/auto`, `meterless/fast`, `meterless/deep`,
-  `meterless/cheap`, `meterless/local`, `meterless/fusion`) and may include model-shaped ids.
-  Use exactly what `/v1/models` returns for `NEMOTRON_MODEL`.
 - Auto-detect scans ports 8088, 8090, 8787, 11434 on localhost.
-
-Known gap: the "one route" rule applies to Meterless and NVIDIA — if the Gateway needs the
-key from the Zetaris download page or the Meterless app needs activation, record the step
-here the moment it is known. Do not mix routes.
 
 Option B — build.nvidia.com key, if Meterless cannot serve Nemotron:
 
@@ -237,6 +256,7 @@ docker compose up -d
 | Bootstrap keeps restarting, `.env` shows `'$' in password` warnings | admin password contains a character outside `$ @ ! % * ? &`, or fewer than 8 chars with lower/upper/digit. Fix `.env` and `docker compose up -d` |
 | New install logs `password authentication failed` | a previous install's `zetaris_pgdata` volume is being reused with a different `POSTGRES_PASSWORD`: `docker compose down -v` (destroys data) or restore the old password |
 | `smoke_test.py` Nemotron FAIL | all three `MODEL_*` must come from one route; check `/v1/models` first, then the model id spelling |
+| Meterless chat `400 no_provider_configured` | runtime is up but nothing serves the route: add a cloud key in the app's Setup (Meterless credit or NVIDIA) or install/start a local model. `/healthz` 200 does not cover this |
 
 ## 8. Status
 
@@ -254,5 +274,7 @@ docker compose up -d
 | 25 Oct | `preflight.sh` inside Ubuntu: 8 PASS + 2 WARN (memory 7 GB, existing `zetaris_pgdata` volume) | PASS |
 | 25 Oct | `verify.sh` inside Ubuntu: 9 checks, 9 pass | PASS — official gate met |
 | 25 Oct | `ZETARIS_API_KEY` (`ak`, 5-year) created in the UI, verified `SELECT 1`, stored only in repo `.env` | done |
-| 25 Oct | `backend/smoke_test.py`: 6 LOCAL PASS, INFRA Zetaris SQL PASS, Nemotron SKIP | partial — no model route yet |
-| 25 Oct | Meterless 1.2.7 installer downloading (624 MB) | in progress — iGPU may not qualify, see §3 |
+| 25 Oct | `backend/smoke_test.py`: 7 PASS (6 LOCAL + INFRA Zetaris SQL), Nemotron FAIL `no_provider_configured` | partial — runtime up, no engine behind it |
+| 25 Oct | Meterless/Nightshift 1.2.7 installed, SHA-256 verified, `meterlessd` running | done |
+| 25 Oct | Hotspot `/healthz` 200, `/v1/models` 73 ids with token, `:8088` wired into repo `.env` | PASS |
+| 25 Oct | `chat/completions` on `meterless/auto`: 400 "No provider is configured" | FAIL — needs cloud key or local model, see §3 |

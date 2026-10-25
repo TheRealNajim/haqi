@@ -9,6 +9,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // The suite renders deterministic fixtures; live path is tested separately
+    // in live-ask.test.ts by stubbing this switch off.
+    env: { VITE_USE_FIXTURES: "true" },
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },

@@ -1,20 +1,15 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import {
-  Share2,
-  Eye,
-  ArrowUpRight,
-  TrendingUp,
-  Flame,
-  Droplet,
-  Thermometer,
-  ArrowUp,
-  X,
-} from "lucide-react";
+import { Share2, Eye, ArrowUpRight, Flame, Wind, Radio, MapPin, RefreshCw, X } from "lucide-react";
 
 import worldMap from "@/assets/world-map.jpg";
 import miniMap from "@/assets/mini-map.jpg";
-import { Dropdown } from "@/components/Dropdown";
+import { COUNTRIES_BY_REGION } from "@/data/geo";
+import { countryCenter, type Place } from "@/data/places";
+import { loadToday, type TodayReading } from "@/data/today";
+import type { PlaceStatus } from "@/hooks/usePlace";
+import { useTodayReading } from "@/hooks/useTodayReading";
+import type { Evidence } from "@/lib/api";
 import { K, canvasPosition } from "@/lib/canvas";
 
 /* ---------- small building blocks ---------- */
@@ -39,130 +34,232 @@ function Card({ children, className = "" }: { children: ReactNode; className?: s
   return <div className={`rounded-[18px] bg-surface ${className}`}>{children}</div>;
 }
 
-/* ---------- charts ---------- */
+/* ---------- reading helpers ---------- */
 
-function rand(seed: number) {
-  const x = Math.sin(seed * 9301 + 49297) * 233280;
-  return x - Math.floor(x);
+const LEVEL_CHIP: Record<string, string> = {
+  "good to go": "bg-risk-green/15 text-risk-green",
+  "be careful": "bg-risk-orange-soft text-risk-orange",
+  "stay in": "bg-risk-red-soft text-risk-red",
+};
+
+const LEVEL_DOT: Record<string, string> = {
+  "good to go": "bg-risk-green ring-risk-green/20",
+  "be careful": "bg-risk-orange ring-risk-orange/20",
+  "stay in": "bg-risk-red ring-risk-red/20",
+};
+
+const SOURCE_NAMES: Record<string, string> = {
+  openaq: "OpenAQ ground stations",
+  waqi: "WAQI city index",
+  openweather: "OpenWeather wind forecast",
+  firms: "NASA FIRMS fire hotspots",
+  brightdata: "Bright Data advisories",
+  cams: "CAMS pollen forecast",
+  zetaris: "Zetaris SQL layer",
+};
+
+function sourceName(sourceId: string) {
+  const prefix = sourceId.split(":")[0] ?? sourceId;
+  return SOURCE_NAMES[prefix] ?? prefix;
 }
 
-function DistributionChart() {
-  // bar groups across 718px width, baseline at bottom
-  const groups: { color: string; count: number; max: number; min: number }[] = [
-    { color: "var(--bar-idle)", count: 10, max: 60, min: 18 },
-    { color: "var(--risk-yellow)", count: 9, max: 190, min: 60 },
-    { color: "var(--bar-idle)", count: 4, max: 40, min: 16 },
-    { color: "var(--risk-red)", count: 16, max: 230, min: 80 },
-    { color: "var(--bar-idle)", count: 5, max: 40, min: 16 },
-    { color: "var(--risk-teal)", count: 13, max: 120, min: 20 },
-    { color: "var(--bar-idle)", count: 13, max: 50, min: 14 },
-    { color: "var(--risk-green)", count: 9, max: 120, min: 40 },
-    { color: "var(--bar-idle)", count: 10, max: 30, min: 14 },
-  ];
-  const bars: { c: string; h: number }[] = [];
-  let s = 1;
-  groups.forEach((g) => {
-    for (let i = 0; i < g.count; i++) {
-      const mid = 1 - Math.abs(i - g.count * 0.7) / g.count;
-      bars.push({ c: g.color, h: g.min + (g.max - g.min) * mid * (0.55 + rand(s++) * 0.45) });
-    }
-  });
-  const gap = 718 / bars.length;
+function timeAgo(iso: string | null): string {
+  if (!iso) return "at an unknown time";
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "at an unknown time";
+  const minutes = Math.round((Date.now() - then) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} d ago`;
+  return `${Math.round(days / 30)} mo ago`;
+}
+
+function clockTime(iso: string): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "just now";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function short(value: number | null, digits = 1): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  return String(Number(value.toFixed(digits)));
+}
+
+/** Strongest reading carrying a PM2.5-equivalent unit. */
+function pm25Reading(evidence: Evidence[]): Evidence | null {
   return (
-    <svg viewBox="0 0 718 240" className="h-full w-full" preserveAspectRatio="none">
-      {bars.map((b, i) => (
-        <rect key={i} x={i * gap + 2} y={240 - b.h} width={2} height={b.h} fill={b.c} rx={1} />
-      ))}
-    </svg>
+    evidence
+      .filter((item) => item.raw_value !== null && (item.unit ?? "").includes("µg/m³"))
+      .sort((a, b) => b.weight - a.weight)[0] ?? null
   );
 }
 
-const ALL_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
+const AQI_BANDS = [
+  { share: 50, className: "bg-risk-green" },
+  { share: 50, className: "bg-risk-yellow" },
+  { share: 50, className: "bg-risk-orange" },
+  { share: 150, className: "bg-risk-red" },
+];
 
-function TrendChart() {
-  const w = 465;
-  const h = 170;
-  const n = 120;
-  const pts: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const t = i / n;
-    const v =
-      0.25 +
-      0.35 * Math.sin(t * Math.PI * 1.1) +
-      0.12 * Math.sin(t * 22) +
-      0.05 * Math.sin(t * 57) +
-      (t > 0.92 ? (t - 0.92) * 6 : 0);
-    pts.push(Math.max(0.02, Math.min(0.95, i === 0 ? 0 : v)));
-  }
-  const path = pts.map((v, i) => `${i ? "L" : "M"}${(i / (n - 1)) * w},${h - v * h}`).join(" ");
+function AqiScale({ aqi }: { aqi: number }) {
+  const marker = Math.min(100, Math.max(0, (aqi / 300) * 100));
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full overflow-visible">
-      {Array.from({ length: n }).map((_, i) => {
-        const x = (i / (n - 1)) * w;
-        const hot = i > 30 && i < 57;
-        const bh = (hot ? 0.6 : 0.4 + rand(i) * 0.35) * h * (0.6 + rand(i + 99) * 0.4);
-        return (
-          <rect
-            key={i}
-            x={x}
-            y={h - bh}
-            width={1.4}
-            height={bh}
-            fill={hot ? "var(--risk-red)" : "var(--bar-idle)"}
-            opacity={hot ? 0.75 : 0.7}
-          />
-        );
-      })}
-      <path d={path} fill="none" stroke="var(--risk-red)" strokeWidth={1.6} />
-      <circle
-        cx={200}
-        cy={h - 0.66 * h}
-        r={8}
-        fill="var(--risk-red)"
-        stroke="var(--surface)"
-        strokeWidth={3}
-      />
-    </svg>
+    <div>
+      <div className="relative">
+        <div className="flex h-3 overflow-hidden rounded-full">
+          {AQI_BANDS.map((band, index) => (
+            <span
+              key={index}
+              className={band.className}
+              style={{ width: `${(band.share / 300) * 100}%` }}
+            />
+          ))}
+        </div>
+        <span
+          aria-hidden="true"
+          className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-surface bg-ink shadow-[var(--shadow-soft)]"
+          style={{ left: `${marker}%` }}
+        />
+      </div>
+      <div className="mt-2 flex justify-between text-[12px] text-ink-faint">
+        <span>0</span>
+        <span>US AQI scale · live</span>
+        <span>300+</span>
+      </div>
+    </div>
   );
+}
+
+function StatTile({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-[19px] text-ink">
+        {icon} {value}
+      </div>
+      <div className="text-[12px] text-ink-faint">{label}</div>
+    </div>
+  );
+}
+
+type TopRow = { name: string; aqi: number | null; level: string };
+
+/** Countries to rank for the region, with the selected country first. */
+function countriesToRank(region: string, selected: string, limit: number): string[] {
+  const list = COUNTRIES_BY_REGION[region] ?? [];
+  if (!list.length) return [];
+  const ordered =
+    selected && list.includes(selected) ? [selected, ...list.filter((c) => c !== selected)] : list;
+  return ordered.slice(0, limit);
 }
 
 /* ---------- page ---------- */
 
-const REGIONS = [
-  { name: "Middle East", level: "High", score: 65 },
-  { name: "South Asia", level: "High", score: 78 },
-  { name: "Southeast Asia", level: "High", score: 80 },
-  { name: "North America", level: "Moderate", score: 35 },
-  { name: "South America", level: "Moderate", score: 40 },
-];
-
 export type TodayPageProps = {
   desktop: boolean;
-  query: string;
-  months: string;
-  onMonthsChange: (value: string) => void;
-  panelOpen: boolean;
-  onPanelOpenChange: (open: boolean) => void;
-  sortDesc: boolean;
-  onSortDescChange: (value: boolean) => void;
+  place: Place | null;
+  placeStatus: PlaceStatus;
+  placeNote: string | null;
+  region: string;
+  active: boolean;
+  /** Design-space upward offset so the cards clear the fold without scrolling. */
+  lift?: number;
+  onUseMyLocation: () => void;
   onViewFullMap: () => void;
 };
 
 export function TodayPage({
   desktop,
-  query,
-  months,
-  onMonthsChange,
-  panelOpen,
-  onPanelOpenChange,
-  sortDesc,
-  onSortDescChange,
+  place,
+  placeStatus,
+  placeNote,
+  region,
+  active,
+  lift = 0,
+  onUseMyLocation,
   onViewFullMap,
 }: TodayPageProps) {
   const pos = (l: number, t: number, w: number, h: number) => canvasPosition(desktop, l, t, w, h);
+  const lifted = (base: number, limit = Infinity) => base - Math.min(lift, limit);
 
-  const regions = REGIONS.filter((r) => r.name.toLowerCase().includes(query.toLowerCase()));
-  const sorted = sortDesc ? [...regions].sort((a, b) => b.score - a.score) : regions;
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [sortDesc, setSortDesc] = useState(true);
+  const [topRows, setTopRows] = useState<TopRow[] | null>(null);
+
+  const { reading, status, error, retry } = useTodayReading(place, active);
+  const verdict = reading?.verdict ?? null;
+  const evidence = useMemo(() => verdict?.evidence ?? [], [verdict]);
+
+  const pm25 = pm25Reading(evidence);
+  const wind = evidence.find((item) => item.source_type === "forecast") ?? null;
+  const fire = evidence.find((item) => item.source_type === "satellite") ?? null;
+  const fresh = evidence.filter((item) => !item.staleness_flag).length;
+  const strongest = useMemo(
+    () => [...evidence].sort((a, b) => b.weight - a.weight)[0] ?? null,
+    [evidence],
+  );
+
+  const sources = useMemo(() => {
+    const map = new Map<string, { name: string; count: number; stale: number }>();
+    for (const item of evidence) {
+      const name = sourceName(item.source_id);
+      const found = map.get(name) ?? { name, count: 0, stale: 0 };
+      found.count += 1;
+      if (item.staleness_flag) found.stale += 1;
+      map.set(name, found);
+    }
+    return [...map.values()];
+  }, [evidence]);
+
+  const latestObservation = evidence
+    .map((item) => item.observed_at)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+
+  const activeRegion = region || place?.region || "";
+
+  // Rank the region's countries once per region. The selected country is first.
+  useEffect(() => {
+    if (!active || !activeRegion) {
+      setTopRows(null);
+      return;
+    }
+    let alive = true;
+    setTopRows(null);
+    const names = countriesToRank(activeRegion, place?.country ?? "", 4);
+
+    Promise.allSettled(
+      names.map(async (name) => {
+        const center = await countryCenter(name);
+        if (!center) return null;
+        const result: TodayReading = await loadToday(center.lat, center.lon);
+        return { name, aqi: result.verdict.aqi, level: result.verdict.level };
+      }),
+    ).then((results) => {
+      if (!alive) return;
+      const rows = results
+        .filter((result) => result.status === "fulfilled")
+        .map((result) => (result as PromiseFulfilledResult<TopRow | null>).value)
+        .filter((row): row is TopRow => row !== null);
+      setTopRows(rows);
+    });
+
+    return () => {
+      alive = false;
+    };
+  }, [active, activeRegion, place?.country]);
+
+  const sortedRows = useMemo(() => {
+    if (!topRows) return null;
+    return [...topRows].sort((a, b) => {
+      const left = a.aqi ?? -1;
+      const right = b.aqi ?? -1;
+      return sortDesc ? right - left : left - right;
+    });
+  }, [topRows, sortDesc]);
 
   const share = async () => {
     try {
@@ -173,6 +270,9 @@ export function TodayPage({
     }
   };
 
+  const aqi = verdict?.aqi ?? null;
+  const level = verdict?.level ?? "";
+
   return (
     <>
       {/* Title */}
@@ -181,7 +281,7 @@ export function TodayPage({
           World Risk Map
         </h1>
         <p className="mt-1 text-[18px] text-ink-soft">
-          Explore environmental risks across your global assets and operations.
+          Live air quality for the place you are looking at.
         </p>
       </div>
       <button
@@ -202,10 +302,10 @@ export function TodayPage({
       {/* Pins */}
       {desktop && (
         <>
-          <Pin n={1} x={735} y={530} onClick={() => onPanelOpenChange(true)} />
-          <Pin n={2} x={1218} y={330} onClick={() => onPanelOpenChange(true)} />
-          <Pin n={6} x={1250} y={603} onClick={() => onPanelOpenChange(true)} />
-          <Pin n={5} x={735} y={738} onClick={() => onPanelOpenChange(true)} />
+          <Pin n={1} x={735} y={530} onClick={() => setPanelOpen(true)} />
+          <Pin n={2} x={1218} y={330} onClick={() => setPanelOpen(true)} />
+          <Pin n={6} x={1250} y={603} onClick={() => setPanelOpen(true)} />
+          <Pin n={5} x={735} y={738} onClick={() => setPanelOpen(true)} />
         </>
       )}
 
@@ -219,11 +319,14 @@ export function TodayPage({
         />
       )}
 
-      {/* Egypt panel */}
+      {/* Area panel */}
       {panelOpen && (
-        <div style={pos(1365, 365, 445, 443)} className={desktop ? "" : "relative mt-8 h-[560px]"}>
+        <div
+          style={pos(1365, lifted(365, 165), 445, 443)}
+          className={desktop ? "" : "relative mt-8 h-[560px]"}
+        >
           <button
-            onClick={() => onPanelOpenChange(false)}
+            onClick={() => setPanelOpen(false)}
             aria-label="Close"
             className="absolute left-1/2 top-0 z-10 flex size-[72px] -translate-x-[15%] items-center justify-center rounded-full bg-surface text-ink shadow-[var(--shadow-soft)] ring-8 ring-canvas/70"
           >
@@ -231,41 +334,61 @@ export function TodayPage({
           </button>
           <Card className="absolute inset-x-0 bottom-0 top-[40px] overflow-hidden bg-surface/90 backdrop-blur">
             <div className="px-[21px] pt-[52px]">
-              <div className="flex items-start justify-between border-b border-border pb-3">
-                <h3 className="text-[26px] tracking-[-0.01em] text-ink">Egypt Operations</h3>
-                <div className="text-right">
-                  <div className="text-[15px] text-ink-faint">Overall Risk Score</div>
-                  <div className="text-[26px] text-risk-red">
-                    85<span className="text-[19px] text-ink-faint">/100</span>
+              <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-[26px] tracking-[-0.01em] text-ink">
+                    {place?.label ?? "Your area"}
+                  </h3>
+                  <p className="mt-0.5 text-[12px] text-ink-faint">
+                    {placeNote ??
+                      (place?.source === "ip"
+                        ? "Approximate location from your network"
+                        : "Chosen in the filters above")}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[15px] text-ink-faint">Current AQI</div>
+                  <div
+                    className={`text-[26px] ${aqi === null ? "text-ink-faint" : "text-risk-red"}`}
+                  >
+                    {aqi === null ? "—" : Math.round(aqi)}
+                    <span className="text-[19px] text-ink-faint">/300</span>
                   </div>
                 </div>
               </div>
               <div className="mt-5 grid grid-cols-3 text-[15px]">
                 <div>
                   <div className="flex items-center gap-2 text-ink">
-                    <span className="size-2 rounded-full bg-risk-red ring-4 ring-risk-red-soft" />{" "}
-                    High Risk
+                    <span
+                      className={`size-2 rounded-full ring-4 ${LEVEL_DOT[level] ?? "bg-ink-faint ring-canvas"}`}
+                    />{" "}
+                    {level || "No reading"}
                   </div>
-                  <div className="mt-1.5 text-ink-faint">Egypt Operations</div>
+                  <div className="mt-1.5 text-ink-faint">Right now</div>
                 </div>
                 <div className="border-l border-border pl-5">
                   <div className="flex items-center gap-2 text-ink">
                     <span className="size-2 rounded-full bg-risk-teal ring-4 ring-canvas" /> Primary
-                    Risk
+                    signal
                   </div>
-                  <div className="mt-1.5 text-ink-faint">Water Stress</div>
+                  <div className="mt-1.5 text-ink-faint">
+                    {strongest ? sourceName(strongest.source_id) : "No source"}
+                  </div>
                 </div>
                 <div className="border-l border-border pl-5">
                   <div className="flex items-center gap-2 text-ink">
-                    <TrendingUp className="size-4 text-risk-red" /> Increasing
+                    <RefreshCw className="size-4 text-risk-green" /> {fresh} of {evidence.length}{" "}
+                    fresh
                   </div>
-                  <div className="mt-1.5 text-ink-faint">Trend 3 month</div>
+                  <div className="mt-1.5 text-ink-faint">
+                    Checked {reading ? clockTime(reading.fetchedAt) : "—"}
+                  </div>
                 </div>
               </div>
             </div>
             <img
               src={miniMap}
-              alt="Egypt operations location"
+              alt="Map preview for this location"
               loading="lazy"
               width={1152}
               height={576}
@@ -275,170 +398,248 @@ export function TodayPage({
         </div>
       )}
 
-      {/* Risk Type Distribution */}
+      {/* Air Quality in Your Area */}
       <div
-        style={pos(120, 795, 758, 495)}
+        style={pos(120, lifted(795), 758, 495)}
         className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6 overflow-x-auto"}`}
       >
-        <div className="flex items-start justify-between px-5 pt-5">
-          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Risk Type Distribution</h3>
-          <button
-            aria-label="Open distribution"
-            className="flex size-[50px] items-center justify-center rounded-full border border-border text-ink"
-          >
-            <ArrowUpRight className="size-5" strokeWidth={1.6} />
-          </button>
-        </div>
-        <div className="mt-[22px] flex justify-between px-5">
-          <div>
-            <div className="text-[21px] text-ink-faint">Total Assets Monitored</div>
-            <div className="mt-1 text-[44px] tracking-[-0.02em] text-ink">1248</div>
-          </div>
-          <div className="mr-[-18px] grid grid-cols-2 gap-x-[38px] gap-y-[34px] pt-0">
-            {[
-              {
-                icon: <Flame className="size-4 fill-risk-orange text-risk-orange" />,
-                l: "Wildfire Exposure",
-              },
-              {
-                icon: <span className="text-[16px] text-risk-red">▲</span>,
-                l: "Flood Risk Increased",
-              },
-              {
-                icon: <Droplet className="size-4 fill-risk-teal text-risk-teal" />,
-                l: "Water Stress Increasing",
-              },
-              {
-                icon: <Thermometer className="size-4 text-risk-green" />,
-                l: "Extreme Heat Detected",
-              },
-            ].map((s) => (
-              <div key={s.l}>
-                <div className="flex items-center gap-1.5 text-[19px] text-ink">
-                  {s.icon} 32% (398)
-                </div>
-                <div className="text-[12px] text-ink-faint">{s.l}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="relative mx-5 mt-[18px] h-[300px]">
-          <DistributionChart />
-          {[
-            { x: 103, y: 92, c: "bg-risk-orange" },
-            { x: 238, y: 100, c: "bg-risk-red" },
-            { x: 406, y: 188, c: "bg-risk-teal" },
-            { x: 616, y: 118, c: "bg-risk-green" },
-          ].map((d) => (
-            <span
-              key={d.x}
-              className={`absolute flex size-4 items-center justify-center rounded-full ${d.c} text-surface`}
-              style={{
-                left: `calc(${(d.x / 718) * 100}% - 8px)`,
-                top: `calc(${(d.y / 230) * 100}% - 8px)`,
-              }}
+        <div className="flex items-start justify-between gap-3 px-5 pt-5">
+          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Air Quality in Your Area</h3>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={onUseMyLocation}
+              className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] text-ink transition-colors hover:border-ink/25 hover:bg-canvas"
             >
-              <ArrowUpRight className="size-2.5" strokeWidth={3} />
-            </span>
-          ))}
+              <MapPin className="size-3" strokeWidth={1.9} />
+              Use my location
+            </button>
+            <button
+              onClick={() => setPanelOpen(true)}
+              aria-label="Open air quality detail"
+              className="flex size-[50px] items-center justify-center rounded-full border border-border text-ink"
+            >
+              <ArrowUpRight className="size-5" strokeWidth={1.6} />
+            </button>
+          </div>
         </div>
+
+        {placeStatus === "empty" ? (
+          <div className="mt-8 px-5">
+            <p className="max-w-[520px] text-[16px] leading-[1.55] text-ink-soft">
+              A whole region has no single air reading. Pick a country above and HAQI will load live
+              numbers for it.
+            </p>
+          </div>
+        ) : status === "loading" || status === "idle" ? (
+          <div aria-busy="true" className="mt-6 px-5">
+            <span className="sr-only">Loading the air-quality reading</span>
+            <div className="h-5 w-40 animate-pulse rounded bg-canvas" />
+            <div className="mt-3 h-12 w-32 animate-pulse rounded bg-canvas" />
+            <div className="mt-6 h-3 w-full animate-pulse rounded bg-canvas" />
+          </div>
+        ) : status === "error" || !verdict ? (
+          <div className="mt-8 px-5">
+            <p className="max-w-[520px] text-[16px] leading-[1.55] text-ink-soft">
+              {error ?? "HAQI could not load this reading."}
+            </p>
+            <button
+              onClick={retry}
+              className="mt-4 inline-flex items-center gap-2 rounded-[10px] border border-border px-3 py-2 text-[13px] text-ink hover:bg-canvas"
+            >
+              <RefreshCw className="size-3.5" strokeWidth={1.8} /> Try again
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-[18px] flex justify-between gap-6 px-5">
+              <div>
+                <div className="text-[21px] text-ink-faint">Current AQI</div>
+                <div className="mt-1 text-[44px] tracking-[-0.02em] text-ink">
+                  {aqi === null ? "—" : Math.round(aqi)}
+                  <span className="text-[19px] text-ink-faint">/300</span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[12px] ${LEVEL_CHIP[level] ?? "bg-canvas text-ink-soft"}`}
+                  >
+                    {level || "No reading"}
+                  </span>
+                  <span className="text-[12px] text-ink-faint">{place?.label}</span>
+                </div>
+              </div>
+              <div className="mr-[-18px] grid grid-cols-2 gap-x-[38px] gap-y-[34px] pt-0">
+                <StatTile
+                  icon={<Radio className="size-4 text-risk-teal" strokeWidth={1.8} />}
+                  value={
+                    pm25
+                      ? `${short(pm25.raw_value)} ${pm25.unit}`
+                      : verdict.aqi !== null
+                        ? `AQI ${Math.round(verdict.aqi)}`
+                        : "—"
+                  }
+                  label={pm25 ? "PM2.5" : "AQI"}
+                />
+                <StatTile
+                  icon={<Wind className="size-4 text-risk-green" strokeWidth={1.8} />}
+                  value={wind ? `${short(wind.raw_value)} ${wind.unit}` : "—"}
+                  label="Wind next 3h"
+                />
+                <StatTile
+                  icon={<Flame className="size-4 fill-risk-orange text-risk-orange" />}
+                  value={fire ? short(fire.raw_value, 0) : "—"}
+                  label="Fire hotspots, 50 km"
+                />
+                <StatTile
+                  icon={<RefreshCw className="size-4 text-risk-green" strokeWidth={1.8} />}
+                  value={`${fresh}/${evidence.length}`}
+                  label="Fresh sources"
+                />
+              </div>
+            </div>
+
+            <div className="relative mx-5 mt-[18px] flex h-[300px] flex-col justify-center">
+              <AqiScale aqi={aqi ?? 0} />
+              <p className="mt-5 max-w-[640px] text-[18px] leading-[1.45] text-ink">
+                {verdict.reason}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-faint">
+                <span>Checked {reading ? clockTime(reading.fetchedAt) : "just now"}</span>
+                <span>·</span>
+                <span>{reading?.demo ? "Demo data, not live" : "Live sources"}</span>
+                {aqi === null && <span>· No current AQI value for this place yet</span>}
+              </div>
+
+              {verdict.blind_spots.length > 0 && (
+                <div className="mt-4 border-t border-border pt-3">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-ink-faint">
+                    Disclosed gaps
+                  </div>
+                  <ul className="mt-1.5 max-w-[620px] space-y-1">
+                    {verdict.blind_spots.slice(0, 2).map((spot) => (
+                      <li
+                        key={spot}
+                        className="flex gap-1.5 text-[12px] leading-[1.4] text-ink-soft"
+                      >
+                        <span className="mt-1.5 size-1 shrink-0 rounded-full bg-ink-faint" />
+                        <span className="line-clamp-2">{spot}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {verdict.blind_spots.length > 2 && (
+                    <div className="mt-1 text-[11px] text-ink-faint">
+                      +{verdict.blind_spots.length - 2} more disclosed gaps
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Top Risk Regions */}
+      {/* Top Regions by AQI */}
       <div
-        style={pos(888, 898, 455, 392)}
+        style={pos(888, lifted(898), 455, 392)}
         className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6"}`}
       >
         <div className="flex items-center justify-between px-[22px] pt-[20px]">
-          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Top Risk Regions</h3>
-          <button
-            onClick={() => onSortDescChange(!sortDesc)}
-            className="text-[16px] text-risk-green"
-          >
-            View Details
-          </button>
+          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Top Regions by AQI</h3>
         </div>
         <div className="mt-[18px] flex justify-between px-[22px] text-[13px] text-ink-faint">
-          <span>Region</span>
-          <span>Average Risk Score</span>
+          <span>{activeRegion || "Place"}</span>
+          <span>Live AQI</span>
         </div>
         <ul className="mt-[10px] px-[22px]">
-          {sorted.map((r, i) => (
-            <li
-              key={r.name}
-              className={`grid h-[66px] grid-cols-[1fr_auto_1fr] items-center ${i ? "border-t border-border" : "border-t border-border"}`}
-            >
-              <span className="text-[18px] text-ink">{r.name}</span>
-              <span
-                className={`rounded-full px-2.5 py-1 text-[13px] ${r.level === "High" ? "bg-risk-red-soft text-risk-red" : "bg-risk-orange-soft text-risk-orange"}`}
-              >
-                {r.level}
-              </span>
-              <span className="text-right text-[16px] text-ink">
-                {r.score}
-                <span className="text-[13px] text-ink-soft">/100</span>
-              </span>
+          {sortedRows === null ? (
+            <>
+              <li className="sr-only">Ranking live readings for this region…</li>
+              {Array.from({ length: 4 }).map((_, index) => (
+                <li
+                  key={index}
+                  className="flex h-[66px] items-center gap-4 border-t border-border text-[13px] text-ink-faint"
+                >
+                  <span className="h-3 w-28 animate-pulse rounded bg-canvas" />
+                  <span className="ml-auto h-3 w-12 animate-pulse rounded bg-canvas" />
+                </li>
+              ))}
+            </>
+          ) : sortedRows.length === 0 ? (
+            <li className="flex h-[140px] items-center border-t border-border text-[14px] text-ink-soft">
+              {activeRegion
+                ? "No live readings for this region yet."
+                : "Pick a region above to rank its countries."}
             </li>
-          ))}
+          ) : (
+            sortedRows.map((row) => (
+              <li
+                key={row.name}
+                className="grid h-[66px] grid-cols-[1fr_auto_1fr] items-center border-t border-border"
+              >
+                <span className="truncate pr-2 text-[18px] text-ink">{row.name}</span>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-[13px] ${LEVEL_CHIP[row.level] ?? "bg-canvas text-ink-soft"}`}
+                >
+                  {row.level || "no data"}
+                </span>
+                <span className="text-right text-[16px] text-ink">
+                  {row.aqi === null ? "—" : Math.round(row.aqi)}
+                  <span className="text-[13px] text-ink-soft">/300</span>
+                </span>
+              </li>
+            ))
+          )}
         </ul>
       </div>
 
-      {/* Risk Trend */}
+      {/* Where This Comes From */}
       <div
-        style={pos(1355, 898, 533, 392)}
+        style={pos(1355, lifted(898), 533, 392)}
         className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6"}`}
       >
         <div className="flex items-center justify-between px-[21px] pt-[22px]">
-          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Risk Trend (All Assets)</h3>
-          <Dropdown
-            small
-            className="h-[38px] rounded-[10px] border border-border"
-            value={months}
-            onChange={onMonthsChange}
-            options={["3 months", "6 months", "12 months"]}
-          />
-        </div>
-        <div className="relative mt-[50px] h-[260px] px-[21px]">
-          <div className="absolute left-[21px] top-0 flex h-[220px] flex-col justify-between text-[13px] text-ink-soft">
-            {["100", "70", "50", "25", "0"].map((l) => (
-              <span key={l} className="leading-none">
-                {l}
-              </span>
-            ))}
-          </div>
-          <div className="absolute left-[48px] right-[20px] top-[48px] h-[180px]">
-            <TrendChart />
-          </div>
-          <div className="absolute left-[188px] top-[-6px] rounded-[8px] bg-surface px-2 py-1 text-[10px] leading-[1.9] text-ink-faint shadow-[var(--shadow-soft)]">
-            <div className="flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-risk-red" />
-              Risk Up <span className="text-ink">12.6%</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-bar-idle" />
-              Over <span className="text-ink">90 Days</span>
-            </div>
-          </div>
-          <div className="absolute bottom-0 left-[38px] right-[21px] flex justify-between text-[13px] text-ink-soft">
-            {ALL_MONTHS.map((m) => (
-              <span key={m}>{m}</span>
-            ))}
-          </div>
-        </div>
-        <div className="mt-[34px] flex gap-[38px] px-[30px] text-[13px] text-ink">
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-full bg-risk-red" /> Risk exposure increased{" "}
-            <span className="ml-2 flex items-center text-[16px] text-risk-red">
-              80% <ArrowUp className="size-3.5" />
-            </span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-full bg-risk-red" /> Average Risk Score{" "}
-            <span className="ml-2 flex items-center text-[16px] text-risk-red">
-              68/100 <ArrowUp className="size-3.5" />
-            </span>
+          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Where This Comes From</h3>
+          <span className="text-[13px] text-ink-faint">
+            {evidence.length} {evidence.length === 1 ? "reading" : "readings"}
           </span>
         </div>
+        <ul className="mt-4 min-h-0 px-[21px]">
+          {status === "loading" || status === "idle" ? (
+            <li className="flex h-[120px] items-center text-[14px] text-ink-faint">
+              Loading sources…
+            </li>
+          ) : sources.length === 0 ? (
+            <li className="flex h-[120px] items-center text-[14px] text-ink-soft">
+              No sources answered.
+            </li>
+          ) : (
+            sources.slice(0, 5).map((source) => (
+              <li
+                key={source.name}
+                className="flex items-center justify-between gap-3 border-t border-border py-2.5 first:border-t-0"
+              >
+                <span className="truncate text-[15px] text-ink">{source.name}</span>
+                <span className="shrink-0 text-[12px] text-ink-faint">
+                  {source.count} read{source.count === 1 ? "" : "s"}
+                  {source.stale > 0 && ` · ${source.stale} stale`}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+        <div className="mt-[18px] flex flex-wrap gap-[26px] px-[21px] text-[13px] text-ink">
+          <span className="flex items-center gap-1">
+            <span className="size-2 rounded-full bg-risk-green" /> Fresh
+            <span className="ml-1 text-[16px] text-risk-green">{fresh}</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="size-2 rounded-full bg-risk-orange" /> Stale
+            <span className="ml-1 text-[16px] text-risk-orange">{evidence.length - fresh}</span>
+          </span>
+        </div>
+        <p className="mt-[14px] px-[21px] text-[11px] leading-[1.5] text-ink-faint">
+          Latest observation {timeAgo(latestObservation ?? null)}. Stale readings are down-weighted,
+          never hidden.
+        </p>
       </div>
     </>
   );

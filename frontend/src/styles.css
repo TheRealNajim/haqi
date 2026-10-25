@@ -114,7 +114,7 @@
   --surface: oklch(0.995 0 0);
   --ink: oklch(0.2 0 0);
   --ink-soft: oklch(0.42 0 0);
-  --ink-faint: oklch(0.62 0 0);
+  --ink-faint: oklch(0.55 0 0);
   --risk-red: oklch(0.62 0.22 25);
   --risk-red-soft: oklch(0.95 0.03 20);
   --risk-orange: oklch(0.72 0.16 50);
@@ -163,7 +163,7 @@
   --surface: oklch(0.22 0 0);
   --ink: oklch(0.96 0 0);
   --ink-soft: oklch(0.78 0 0);
-  --ink-faint: oklch(0.6 0 0);
+  --ink-faint: oklch(0.68 0 0);
   --risk-red-soft: oklch(0.3 0.07 22);
   --risk-orange-soft: oklch(0.32 0.07 60);
   --bar-idle: oklch(0.38 0 0);
@@ -203,6 +203,21 @@
   animation: screen-in 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes rail-in {
+  from {
+    opacity: 0;
+    transform: translate3d(28px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.rail-in {
+  animation: rail-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes map-in {
   from {
     opacity: 0;
@@ -231,6 +246,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .screen-in,
+  .rail-in,
   .map-enter,
   .map-exit {
     animation: none;

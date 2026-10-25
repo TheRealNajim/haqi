@@ -8,43 +8,50 @@ describe("Home", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  it("renders the dashboard and its main panels", () => {
+  it("renders the dashboard and its main panels", async () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { level: 1, name: "World Risk Map" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Select Region" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Switch to dark theme" })).toBeInTheDocument();
     expect(screen.getByAltText("haqi")).toBeInTheDocument();
+
+    // The original dashboard cards are kept; their content is live.
     expect(
-      screen.getByRole("heading", { level: 3, name: "Risk Type Distribution" }),
+      await screen.findByRole("heading", { name: "Air Quality in Your Area" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: "Top Risk Regions" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { level: 3, name: "Risk Trend (All Assets)" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: "Egypt Operations" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Top Regions by AQI" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Where This Comes From" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Lagos, Nigeria" })).toBeInTheDocument();
+
+    // Fixtures mode renders a labelled demo reading, never an unlabelled one.
+    expect((await screen.findAllByText("82")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Demo data, not live/)).toBeInTheDocument();
   });
 
-  it("cascades the region, country and area filters", () => {
+  it("prefills the filters from location detection and cascades changes", async () => {
     render(<App />);
 
-    // Dependent filters stay locked until their parent is chosen.
-    expect(screen.getByRole("button", { name: "Select region first" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Select country first" })).toBeInTheDocument();
+    // Detection pre-fills region, country and area in fixtures mode.
+    expect(await screen.findByRole("button", { name: "Lagos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nigeria" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Africa" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Select Region" }));
+    // Changing the region clears its children.
     fireEvent.click(screen.getByRole("button", { name: "Africa" }));
+    fireEvent.click(screen.getByRole("button", { name: "Asia" }));
     expect(screen.getByRole("button", { name: "Select Country" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Select country first" })).toBeInTheDocument();
+    expect(await screen.findByText(/A whole region has no single air reading/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Select Country" }));
-    fireEvent.click(screen.getByRole("button", { name: "Nigeria" }));
+    fireEvent.click(screen.getByRole("button", { name: "India" }));
     expect(screen.getByRole("button", { name: "Select Area" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Select Area" }));
-    fireEvent.click(screen.getByRole("button", { name: "Lagos" }));
-    expect(screen.getByRole("button", { name: "Lagos" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delhi" }));
+    expect(screen.getByRole("button", { name: "Delhi" })).toBeInTheDocument();
   });
 
   it("switches between light and dark themes", () => {
@@ -121,7 +128,7 @@ describe("Home", () => {
     expect(screen.getAllByText(/Demo data/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Demo fixture · not live data/).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Keep exploring" })).toBeInTheDocument();
-    expect(screen.getByLabelText("HAQI capabilities")).toBeInTheDocument();
+    expect(screen.queryByLabelText("HAQI capabilities")).not.toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("button", {

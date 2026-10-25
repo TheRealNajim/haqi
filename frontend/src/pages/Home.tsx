@@ -4,7 +4,8 @@ import { Map as MapIcon, MessageCircle, BadgeQuestionMark, X, type LucideIcon } 
 
 import worldMap from "@/assets/world-map.jpg";
 import { AppHeader, type HeaderFilterKey } from "@/components/AppHeader";
-import { AREAS_BY_COUNTRY, COUNTRIES_BY_REGION } from "@/data/geo";
+import { COUNTRIES_BY_REGION, AREAS_BY_COUNTRY } from "@/data/geo";
+import { usePlace } from "@/hooks/usePlace";
 import { H, K, W, canvasPosition } from "@/lib/canvas";
 import { SCREEN_PATHS, useRoute, type Screen } from "@/lib/router";
 import { AskPage } from "@/pages/Ask";
@@ -91,19 +92,33 @@ function ImmersiveMap({ closing, onClose }: { closing: boolean; onClose: () => v
 // The page must paint at its final size: the first render is measured here so
 // the canvas never appears oversized and then shrinks on refresh.
 const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth || 1;
+const viewportHeight = () => window.innerHeight || 1;
+
+/**
+ * How far the Today cards may be lifted so they fit in the window without
+ * scrolling. They keep their size; only their top edge moves up.
+ */
+const CARDS_BOTTOM = 1290;
+const MAX_LIFT = 250;
+const BOTTOM_MARGIN = 8;
 
 export function HomePage() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(() => viewportWidth() / W);
+  const [lift, setLift] = useState(0);
   const [desktop, setDesktop] = useState(() => window.innerWidth >= 1100);
-  const [region, setRegion] = useState("");
-  const [country, setCountry] = useState("");
-  const [area, setArea] = useState("");
+  const {
+    region,
+    country,
+    area,
+    state: placeState,
+    selectRegion,
+    selectCountry,
+    selectArea,
+    useMyLocation,
+  } = usePlace();
   const [riskType, setRiskType] = useState("");
-  const [months, setMonths] = useState("12 months");
   const [navHover, setNavHover] = useState<{ label: string; top: number } | null>(null);
-  const [panelOpen, setPanelOpen] = useState(true);
-  const [sortDesc, setSortDesc] = useState(false);
   const [query, setQuery] = useState("");
   const [immersive, setImmersive] = useState(false);
   const [immersiveClosing, setImmersiveClosing] = useState(false);
@@ -151,8 +166,12 @@ export function HomePage() {
   useLayoutEffect(() => {
     const update = () => {
       const w = wrapRef.current?.clientWidth || viewportWidth();
-      setDesktop(window.innerWidth >= 1100);
-      setScale(w / W);
+      const nextDesktop = window.innerWidth >= 1100;
+      const nextScale = w / W;
+      const overflow = (CARDS_BOTTOM + BOTTOM_MARGIN) * K * nextScale - viewportHeight();
+      setDesktop(nextDesktop);
+      setScale(nextScale);
+      setLift(nextDesktop ? Math.min(MAX_LIFT, Math.max(0, overflow / (K * nextScale))) : 0);
     };
     update();
     window.addEventListener("resize", update);
@@ -161,14 +180,11 @@ export function HomePage() {
 
   const setFilter = (key: HeaderFilterKey, value: string) => {
     if (key === "region") {
-      setRegion(value === "Select Region" ? "" : value);
-      setCountry("");
-      setArea("");
+      selectRegion(value === "Select Region" ? "" : value);
     } else if (key === "country") {
-      setCountry(value === "Select Country" ? "" : value);
-      setArea("");
+      selectCountry(value === "Select Country" ? "" : value);
     } else if (key === "area") {
-      setArea(value === "Select Area" ? "" : value);
+      selectArea(value === "Select Area" ? "" : value);
     } else {
       setRiskType(value === "All Risk Type" ? "" : value);
     }
@@ -303,13 +319,13 @@ export function HomePage() {
             >
               <TodayPage
                 desktop
-                query={query}
-                months={months}
-                onMonthsChange={setMonths}
-                panelOpen={panelOpen}
-                onPanelOpenChange={setPanelOpen}
-                sortDesc={sortDesc}
-                onSortDescChange={setSortDesc}
+                place={placeState.place}
+                placeStatus={placeState.status}
+                placeNote={placeState.note}
+                region={region}
+                active={screen === "today"}
+                lift={lift}
+                onUseMyLocation={useMyLocation}
                 onViewFullMap={openImmersive}
               />
             </div>
@@ -347,13 +363,12 @@ export function HomePage() {
           >
             <TodayPage
               desktop={false}
-              query={query}
-              months={months}
-              onMonthsChange={setMonths}
-              panelOpen={panelOpen}
-              onPanelOpenChange={setPanelOpen}
-              sortDesc={sortDesc}
-              onSortDescChange={setSortDesc}
+              place={placeState.place}
+              placeStatus={placeState.status}
+              placeNote={placeState.note}
+              region={region}
+              active={screen === "today"}
+              onUseMyLocation={useMyLocation}
               onViewFullMap={openImmersive}
             />
           </div>

@@ -1,10 +1,19 @@
 /**
- * Ask-page fixtures.
+ * Ask-page data layer.
  *
- * Everything here is deterministic demo data: the UI renders the same answer
- * for the same question. Swap `askHaqi` for a real API call later without
- * touching the composer or answer components.
+ * Live mode calls the backend verdict API; offline mode renders the
+ * deterministic fixtures below. Keeping both behind one `askHaqi` export means
+ * the composer and answer components never need to know which mode is active.
  */
+
+import {
+  ApiError,
+  USE_FIXTURES,
+  askQuestion,
+  type Evidence as ApiEvidence,
+  type Verdict,
+  type VerdictLevel,
+} from "@/lib/api";
 
 export type CapabilityId = "analyze" | "ask" | "why" | "sources";
 
@@ -105,25 +114,145 @@ export type DemoAnswer = {
     label: string;
     window: string;
     note: string;
+    /** false when the answer comes from fixtures or a labelled fallback. */
+    live: boolean;
   };
+  /** Disclosed gaps from the verdict. Rendered as chips, never hidden. */
+  blindSpots?: string[];
+  /** Raw chain behind a live verdict (weights, staleness, source type). */
+  evidence?: ApiEvidence[];
+  ledgerId?: string | null;
 };
 
 export type AskRequest = {
   question: string;
 };
 
-/** Simulated "thinking" pause, kept here so a real API can own its own timing. */
+/** Simulated "thinking" pause for offline fixtures only. */
 export const DEMO_LATENCY_MS = 650;
 
+/** One switch for the whole app: offline fixtures vs. the live verdict API. */
+export const FIXTURES_MODE = USE_FIXTURES;
+
+const LEVEL_TONE: Record<VerdictLevel, Tone> = {
+  "good to go": "green",
+  "be careful": "orange",
+  "stay in": "red",
+};
+
+const LIVE_FOLLOW_UPS = [
+  "Is it safe to run outside later?",
+  "Which sources answered this?",
+  "What would change the answer?",
+];
+
+/** Kid-facing heading from the backend window; the reason stays verbatim. */
+function answerTitle(verdict: Verdict): string {
+  const window = verdict.window?.trim();
+  if (!window || window === "now") return "Right now";
+  return window.charAt(0).toUpperCase() + window.slice(1);
+}
+
+function evidenceLine(item: ApiEvidence): string {
+  const weight = Math.round(item.weight * 100);
+  const stale = item.staleness_flag ? " · stale, down-weighted" : "";
+  return `${item.claim} — ${item.source_type}, ${weight}% weight${stale}`;
+}
+
+/**
+ * Render the backend Verdict in the existing answer layout. Copy rules:
+ * `reason` and evidence `claim` strings are shown verbatim; nothing is
+ * paraphrased. A null AQI is presented as "no current reading", never as zero.
+ */
+function verdictToAnswer(verdict: Verdict): DemoAnswer {
+  const fresh = verdict.evidence.filter((item) => !item.staleness_flag).length;
+  const stale = verdict.evidence.length - fresh;
+  const hasAqi = typeof verdict.aqi === "number";
+  const tone = LEVEL_TONE[verdict.level] ?? "neutral";
+
+  const evidenceSection: AnswerSection = verdict.evidence.length
+    ? {
+        heading: "What the sources said",
+        kind: "observed",
+        body: "Each line is a source we actually reached. The percentage is how much weight it carried.",
+        bullets: verdict.evidence.map(evidenceLine),
+      }
+    : {
+        heading: "What the sources said",
+        kind: "observed",
+        body: "No source returned a usable reading for this plan.",
+      };
+
+  return {
+    title: answerTitle(verdict),
+    verdict: verdict.level,
+    verdictTone: tone,
+    summary: verdict.reason,
+    metrics: [
+      {
+        label: "AQI",
+        value: hasAqi ? String(verdict.aqi) : "—",
+        detail: hasAqi
+          ? "PM2.5-equivalent, weighted across fresh sources"
+          : "No current reading — the gaps are listed below",
+        tone: hasAqi ? tone : "neutral",
+      },
+      {
+        label: "Window",
+        value: verdict.window?.trim() || "now",
+        detail: "What this answer covers",
+        tone: "neutral",
+      },
+      {
+        label: "Evidence",
+        value: String(verdict.evidence.length),
+        detail: `${fresh} fresh · ${stale} stale`,
+        tone: stale > 0 ? "orange" : "teal",
+      },
+    ],
+    sections: [
+      evidenceSection,
+      {
+        heading: "How we weighed it",
+        kind: "context",
+        body: "Station readings carry the most weight, then satellite and forecast context. Older readings are down-weighted and labelled, never silently averaged in.",
+      },
+    ],
+    followUps: LIVE_FOLLOW_UPS,
+    provenance: {
+      label: verdict.fallback ? "Fallback fixture · not live data" : "Live evidence chain",
+      window: verdict.window?.trim() || "now",
+      note: verdict.ledger_id ? `Receipt ${verdict.ledger_id}. ` : "",
+      live: !verdict.fallback,
+    },
+    blindSpots: verdict.blind_spots,
+    evidence: verdict.evidence,
+    ledgerId: verdict.ledger_id,
+  };
+}
+
 export async function askHaqi({ question }: AskRequest): Promise<DemoAnswer> {
-  await new Promise((resolve) => setTimeout(resolve, DEMO_LATENCY_MS));
-  return getDemoAnswer(question);
+  if (FIXTURES_MODE) {
+    await new Promise((resolve) => setTimeout(resolve, DEMO_LATENCY_MS));
+    return getDemoAnswer(question);
+  }
+
+  try {
+    return verdictToAnswer(await askQuestion({ question }));
+  } catch (error) {
+    // The error contract can carry a labelled fallback verdict; render it as
+    // demo data rather than hiding the answer behind a toast.
+    if (error instanceof ApiError && error.fallback) {
+      return verdictToAnswer(error.fallback);
+    }
+    throw error;
+  }
 }
 
 const SNAPSHOT = "23 Oct 2026 · 09:40 WAT";
 
 function provenance(window: string, note: string): DemoAnswer["provenance"] {
-  return { label: "Demo fixture · not live data", window, note };
+  return { label: "Demo fixture · not live data", window, note, live: false };
 }
 
 const cityBars: AnswerBar[] = [

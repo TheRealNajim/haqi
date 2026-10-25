@@ -10,6 +10,7 @@ import {
   ArrowUp,
   BookOpenCheck,
   ChartNoAxesCombined,
+  CircleAlert,
   CirclePlus,
   CornerDownLeft,
   Eye,
@@ -29,6 +30,7 @@ import worldMap from "@/assets/world-map.jpg";
 import {
   CAPABILITIES,
   DEMO_SNAPSHOT,
+  FIXTURES_MODE,
   askHaqi,
   type AnswerComparison,
   type CapabilityId,
@@ -83,6 +85,12 @@ const RAIL_X = 1227;
 
 /** Answer card width: keeps the 28-unit gutter before the right rail. */
 const ANSWER_W = RAIL_X - CONTENT_X - 28;
+
+/** Top edge of the answer state, just below the "Ask HAQI" heading. */
+const ANSWER_TOP = 240;
+
+/** Follow-ups rail keeps the same gap below the follow-up composer. */
+const FOLLOWUP_TOP = ANSWER_TOP + 332;
 
 /** Capability row placement: top edge, settled content height, and the gap to the composer. */
 const CARD_TOP = 250;
@@ -157,31 +165,6 @@ function CapabilityCard({ id, desktop, onPrompt }: CapabilityCardProps) {
         </ul>
       </div>
     </article>
-  );
-}
-
-/** Compact, non-interactive reminder of the four capabilities in the answer state. */
-function CapabilityStrip({ desktop }: { desktop: boolean }) {
-  return (
-    <div
-      role="group"
-      style={desktop ? pos(true, CONTENT_X, 236, 1200, 40) : undefined}
-      aria-label="HAQI capabilities"
-      className={`flex flex-wrap gap-2 ${desktop ? "" : "mt-5"}`}
-    >
-      {CAPABILITIES.map((capability) => {
-        const Icon = CAPABILITY_ICONS[capability.id];
-        return (
-          <span
-            key={capability.id}
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] text-ink-soft"
-          >
-            <Icon className="size-3.5 shrink-0" strokeWidth={1.6} />
-            {capability.title}
-          </span>
-        );
-      })}
-    </div>
   );
 }
 
@@ -276,7 +259,11 @@ function Composer({
               Listening — speak, then stop when you are done.
             </span>
           ) : thinking ? (
-            "HAQI is checking the demo fixtures…"
+            FIXTURES_MODE ? (
+              "HAQI is checking the demo fixtures…"
+            ) : (
+              "HAQI is checking live sources…"
+            )
           ) : !speechSupported ? (
             "Voice input is unavailable in this browser — type your question instead."
           ) : null}
@@ -405,13 +392,13 @@ function Comparison({ comparison }: { comparison: AnswerComparison }) {
   return (
     <div className="mt-5 rounded-[14px] border border-border px-4 py-4">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[13px] font-medium text-ink">{comparison.title}</h3>
-        <span className="text-[10px] uppercase tracking-[0.08em] text-ink-faint">AQI</span>
+        <h3 className="font-medium text-ink text-[14px]">{comparison.title}</h3>
+        <span className="uppercase tracking-[0.08em] text-ink-faint text-[10px]">AQI</span>
       </div>
       <ul className="mt-3 space-y-3">
         {comparison.bars.map((bar) => (
           <li key={bar.label}>
-            <div className="flex items-center justify-between gap-3 text-[13px]">
+            <div className="flex items-center justify-between gap-3 text-[14px]">
               <span className="truncate text-ink">{bar.label}</span>
               <span className="shrink-0 text-ink-soft">{bar.display}</span>
             </div>
@@ -424,7 +411,7 @@ function Comparison({ comparison }: { comparison: AnswerComparison }) {
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-[11px] leading-[1.4] text-ink-faint">{comparison.caption}</p>
+      <p className="mt-3 leading-[1.5] text-ink-faint text-[12px]">{comparison.caption}</p>
     </div>
   );
 }
@@ -432,22 +419,41 @@ function Comparison({ comparison }: { comparison: AnswerComparison }) {
 function AnswerBody({ answer }: { answer: DemoAnswer }) {
   return (
     <div aria-live="polite">
-      <span className="inline-flex items-center gap-2 rounded-full bg-canvas px-3 py-1 text-[12px] text-ink">
+      {!answer.provenance.live && (
+        <div
+          role="status"
+          className="mb-3 flex items-start gap-2 rounded-[12px] border border-dashed border-risk-orange/70 bg-risk-orange-soft px-4 py-3 leading-[1.55] text-ink-soft text-[13px]"
+        >
+          <Info className="mt-0.5 size-4 shrink-0 text-ink" strokeWidth={1.6} />
+          <p>
+            <span className="font-medium text-ink">
+              {answer.provenance.label.startsWith("Fallback")
+                ? "Honest fallback data."
+                : "Offline demo mode."}
+            </span>{" "}
+            {answer.provenance.label.startsWith("Fallback")
+              ? "A live source was unreachable, so the backend returned a labelled fixture verdict. Treat it as an example, not today's air."
+              : "Fixtures are switched on (VITE_USE_FIXTURES=true). Turn them off to read live sources."}
+          </p>
+        </div>
+      )}
+
+      <span className="inline-flex items-center gap-2 rounded-full bg-canvas px-3 py-1 text-ink text-[13px]">
         <span aria-hidden className={`size-2 rounded-full ${DOT[answer.verdictTone]}`} />
         {answer.verdict}
       </span>
 
-      <h2 className="mt-3 font-display text-[26px] leading-[1.3] text-ink">{answer.title}</h2>
-      <p className="mt-2 text-[16px] leading-[1.6] text-ink-soft">{answer.summary}</p>
+      <h2 className="mt-3 font-display leading-[1.25] text-ink text-[28px]">{answer.title}</h2>
+      <p className="mt-2 leading-[1.6] text-ink-soft text-[17px]">{answer.summary}</p>
 
       <div className="mt-5 grid gap-2 min-[520px]:grid-cols-3">
         {answer.metrics.map((metric) => (
           <div key={metric.label} className="rounded-[12px] bg-canvas px-4 py-3">
-            <div className="text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+            <div className="uppercase tracking-[0.08em] text-ink-faint text-[10px]">
               {metric.label}
             </div>
-            <div className="mt-1 text-[22px] leading-none text-ink">{metric.value}</div>
-            <div className="mt-1.5 text-[12px] leading-[1.4] text-ink-soft">{metric.detail}</div>
+            <div className="mt-1 leading-none text-ink text-[24px]">{metric.value}</div>
+            <div className="mt-1.5 leading-[1.45] text-ink-soft text-[13px]">{metric.detail}</div>
           </div>
         ))}
       </div>
@@ -466,23 +472,23 @@ function AnswerBody({ answer }: { answer: DemoAnswer }) {
           >
             <div className="flex flex-wrap items-center gap-2">
               <span aria-hidden className={`size-1.5 rounded-full ${SECTION_DOT[section.kind]}`} />
-              <h3 className="text-[10px] font-medium uppercase tracking-[0.1em] text-ink-faint">
+              <h3 className="font-medium uppercase tracking-[0.1em] text-ink-faint text-[11px]">
                 {section.heading}
               </h3>
               {section.kind === "hypothesis" && (
-                <span className="rounded-full bg-risk-orange-soft px-2 py-0.5 text-[10px] text-ink">
+                <span className="rounded-full bg-risk-orange-soft px-2 py-0.5 text-ink text-[10px]">
                   Not confirmed
                 </span>
               )}
             </div>
-            <p className="mt-2 text-[14px] leading-[1.6] text-ink-soft">{section.body}</p>
+            <p className="mt-2 leading-[1.65] text-ink-soft text-[15px]">{section.body}</p>
             {section.bullets && (
-              <ul className="mt-2 space-y-1.5">
+              <ul className="mt-2 space-y-2">
                 {section.bullets.map((bullet) => (
-                  <li key={bullet} className="flex gap-2 text-[13px] leading-[1.5] text-ink-soft">
+                  <li key={bullet} className="flex gap-2 leading-[1.55] text-ink-soft text-[14px]">
                     <span
                       aria-hidden
-                      className="mt-[7px] size-1 shrink-0 rounded-full bg-ink-faint"
+                      className="mt-[8px] size-1 shrink-0 rounded-full bg-ink-faint"
                     />
                     <span>{bullet}</span>
                   </li>
@@ -493,14 +499,41 @@ function AnswerBody({ answer }: { answer: DemoAnswer }) {
         ))}
       </div>
 
-      <div className="mt-6 border-t border-border pt-4 text-[11px] leading-[1.5] text-ink-faint">
+      {answer.blindSpots && answer.blindSpots.length > 0 ? (
+        <div className="mt-6">
+          <h3 className="font-medium uppercase tracking-[0.1em] text-ink-faint text-[11px]">
+            Blind spots
+          </h3>
+          <p className="mt-1 leading-[1.55] text-ink-faint text-[12px]">
+            Gaps disclosed by the backend. They are part of the answer, not an error.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {answer.blindSpots.map((spot) => (
+              <li
+                key={spot}
+                className="inline-flex max-w-full items-start gap-1.5 rounded-full border border-dashed border-border bg-canvas px-3 py-1.5 leading-[1.45] text-ink-soft text-[12px]"
+              >
+                <CircleAlert className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.6} />
+                <span>{spot}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : answer.provenance.live ? (
+        <p className="mt-6 leading-[1.55] text-ink-faint text-[12px]">
+          Every source configured for this check answered.
+        </p>
+      ) : null}
+
+      <div className="mt-6 border-t border-border pt-4 leading-[1.55] text-ink-faint text-[12px]">
         <div className="flex items-start gap-2">
-          <Info className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.6} />
+          <Info className="mt-0.5 size-4 shrink-0" strokeWidth={1.6} />
           <p>
             <span className="font-medium text-ink-soft">{answer.provenance.label}</span> ·{" "}
             {answer.provenance.window}
             <br />
-            {answer.provenance.note} Snapshot {DEMO_SNAPSHOT}.
+            {answer.provenance.note}
+            {answer.provenance.live ? "" : ` Snapshot ${DEMO_SNAPSHOT}.`}
           </p>
         </div>
       </div>
@@ -516,7 +549,9 @@ function Thinking() {
           className="size-4 animate-spin motion-reduce:animate-none"
           strokeWidth={1.8}
         />
-        <p className="text-[14px]">HAQI is reading the demo fixtures…</p>
+        <p className="text-[15px]">
+          {FIXTURES_MODE ? "HAQI is reading the demo fixtures…" : "HAQI is checking live sources…"}
+        </p>
       </div>
       <div className="mt-4 space-y-2">
         {[100, 92, 76].map((width) => (
@@ -539,19 +574,25 @@ type Exchange = {
 function AnswerPanel({
   exchange,
   desktop,
+  wide,
   onNewQuestion,
   scrollRef,
 }: {
   exchange: Exchange;
   desktop: boolean;
+  wide: boolean;
   onNewQuestion: () => void;
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
+  const liveAnswer = exchange.answer ? exchange.answer.provenance.live : !FIXTURES_MODE;
+
   return (
     <div
-      style={desktop ? autoPos(true, CONTENT_X, 300, ANSWER_W, 890) : undefined}
+      style={
+        desktop ? autoPos(true, CONTENT_X, ANSWER_TOP, wide ? CONTENT_W : ANSWER_W, 890) : undefined
+      }
       className={`flex flex-col overflow-hidden rounded-[18px] border border-border bg-surface shadow-[var(--shadow-soft)] ${
-        desktop ? "" : "mt-5"
+        desktop ? "transition-[width] duration-300 ease-out motion-reduce:transition-none" : "mt-5"
       }`}
     >
       <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
@@ -559,18 +600,23 @@ function AnswerPanel({
           <span className="flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-canvas text-ink">
             <MessageCircle className="size-3.5" strokeWidth={1.7} />
           </span>
-          <span className="truncate text-[12px] text-ink-soft">HAQI answer</span>
-          <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] text-ink-faint">
-            Demo data
+          <span className="truncate text-[13px] text-ink-soft">HAQI answer</span>
+          <span
+            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${
+              liveAnswer ? "border-risk-green/40 text-risk-green" : "border-border text-ink-faint"
+            }`}
+          >
+            {liveAnswer ? "Live" : "Demo data"}
           </span>
         </div>
         <button
           type="button"
           onClick={onNewQuestion}
-          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[12px] text-ink transition-colors hover:border-ink/25 hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+          aria-label="New question"
+          className="flex shrink-0 items-center gap-1.5 rounded-[8px] border border-border px-3 py-1.5 text-ink transition-colors hover:border-ink/25 hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 text-[12px]"
         >
           <Plus className="size-3.5" strokeWidth={1.8} />
-          New question
+          New<span className="hidden min-[420px]:inline"> question</span>
         </button>
       </div>
 
@@ -580,8 +626,8 @@ function AnswerPanel({
       >
         <div className={`px-5 ${desktop ? "py-6" : "py-5"}`}>
           <div className="rounded-[12px] border border-border bg-canvas px-4 py-3">
-            <p className="text-[10px] uppercase tracking-[0.1em] text-ink-faint">You asked</p>
-            <p className="mt-1 text-[15px] leading-[1.5] text-ink">{exchange.question}</p>
+            <p className="uppercase tracking-[0.1em] text-ink-faint text-[10px]">You asked</p>
+            <p className="mt-1 leading-[1.55] text-ink text-[16px]">{exchange.question}</p>
           </div>
 
           {exchange.answer ? (
@@ -612,13 +658,13 @@ function FollowUps({
 
   return (
     <div
-      style={desktop ? autoPos(true, RAIL_X, 632, 661, 350) : undefined}
+      style={desktop ? autoPos(true, RAIL_X, FOLLOWUP_TOP, 661, 350) : undefined}
       className={`rounded-[18px] border border-border bg-surface p-5 shadow-[var(--shadow-soft)] ${
         desktop ? "" : "mt-4"
       }`}
     >
-      <h2 className="text-[16px] text-ink">Keep exploring</h2>
-      <p className="mt-1 text-[12px] leading-[1.5] text-ink-soft">
+      <h2 className="text-ink text-[17px]">Keep exploring</h2>
+      <p className="mt-1 leading-[1.55] text-ink-soft text-[13px]">
         These fill the composer so you can edit before sending.
       </p>
       <ul className="mt-3 space-y-1">
@@ -627,10 +673,10 @@ function FollowUps({
             <button
               type="button"
               onClick={() => onPick(prompt)}
-              className="group flex min-h-10 w-full items-start gap-2 rounded-[8px] px-2 py-2.5 text-left text-[13px] leading-[1.45] text-ink-soft transition-colors hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+              className="group flex min-h-10 w-full items-start gap-2 rounded-[8px] px-2 py-2.5 text-left leading-[1.5] text-ink-soft transition-colors hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 text-[14px]"
             >
               <CornerDownLeft
-                className="mt-0.5 size-3.5 shrink-0 text-ink-faint group-hover:text-ink"
+                className="mt-0.5 size-4 shrink-0 text-ink-faint group-hover:text-ink"
                 strokeWidth={1.6}
               />
               <span>{prompt}</span>
@@ -638,7 +684,7 @@ function FollowUps({
           </li>
         ))}
       </ul>
-      <p className="mt-4 border-t border-border pt-3 text-[11px] leading-[1.5] text-ink-faint">
+      <p className="mt-4 border-t border-border pt-3 leading-[1.55] text-ink-faint text-[12px]">
         Follow-ups fill the composer. Edit one before sending, or ask your own question.
       </p>
     </div>
@@ -651,6 +697,9 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
   const [text, setText] = useState("");
   const [exchange, setExchange] = useState<Exchange | null>(null);
   const [thinking, setThinking] = useState(false);
+  // Desktop answer state: the verdict fills the content width until the reader
+  // asks a new question, which slides the composer in from the right rail.
+  const [composerOpen, setComposerOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const answerScrollRef = useRef<HTMLDivElement>(null);
   const answerTopRef = useRef<HTMLDivElement>(null);
@@ -693,6 +742,7 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
     requestId.current = id;
     setExchange({ question, answer: null });
     setThinking(true);
+    setComposerOpen(false);
     setText("");
     speechBase.current = "";
 
@@ -712,8 +762,16 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
 
   const startNewQuestion = () => {
     requestId.current += 1;
-    setExchange(null);
     setThinking(false);
+    if (desktop && exchange?.answer) {
+      // Keep the current verdict visible and shrink it as the composer slides
+      // in from the right.
+      setComposerOpen(true);
+      focusSoon(textareaRef);
+      return;
+    }
+    setComposerOpen(false);
+    setExchange(null);
     focusSoon(textareaRef);
   };
 
@@ -795,27 +853,28 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
 
       {exchange ? (
         <>
-          <CapabilityStrip desktop={desktop} />
-
           <div ref={answerTopRef}>
             <AnswerPanel
               exchange={exchange}
               desktop={desktop}
+              wide={desktop && !composerOpen}
               onNewQuestion={startNewQuestion}
               scrollRef={answerScrollRef}
             />
           </div>
 
-          {exchange.answer && (
+          {exchange.answer && (!desktop || composerOpen) && (
             <FollowUps answer={exchange.answer} desktop={desktop} onPick={usePrompt} />
           )}
 
-          <div
-            style={desktop ? pos(true, RAIL_X, 300, 661, 300) : undefined}
-            className={desktop ? "" : "mt-4"}
-          >
-            {composer("Ask a follow-up")}
-          </div>
+          {(!desktop || composerOpen) && (
+            <div
+              style={desktop ? pos(true, RAIL_X, ANSWER_TOP, 661, 300) : undefined}
+              className={desktop ? "rail-in" : "mt-4"}
+            >
+              {composer("Ask a follow-up")}
+            </div>
+          )}
         </>
       ) : (
         <>

@@ -2,6 +2,8 @@
 .env
 *.env
 !.env.example
+# database dumps + a copy of the platform .env made by infra/backup.ps1
+backups/
 
 # agent + planning docs (never in repo)
 AGENTS.md

@@ -123,6 +123,50 @@ if (-not $key) {
     }
 }
 
+# --- Zetaris recipe: the table the backend actually queries --------------------------------
+$recipe = 'haqi_views.air_quality_readings'
+if ($key) {
+    try {
+        $body = @{
+            queryId = [guid]::NewGuid().ToString()
+            sql     = 'SELECT source_id, raw_value, unit, distance_km, observed_at FROM ' + $recipe
+            source  = 'SqlEditor'
+            limit   = 5
+        } | ConvertTo-Json -Compress
+        $h = @{
+            Authorization  = 'Bearer ' + $key
+            'X-Org-ID'     = [string]$org
+            'X-Request-ID' = [guid]::NewGuid().ToString()
+        }
+        $res = Invoke-RestMethod ($rest.TrimEnd('/') + '/sql-editor/sqls/run') -Method Post `
+            -ContentType 'application/json' -Headers $h -Body $body -TimeoutSec 90
+        $row = $res.data[0]
+        if (-not $row -or $row.Count -lt 5) {
+            Bad ("recipe: " + $recipe + " returned no contract row")
+        } else {
+            $stamp = [string]$row[4]
+            $age = $null
+            try {
+                $when = [datetime]::Parse($stamp, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
+                $age = ((Get-Date).ToUniversalTime() - $when).TotalHours
+            } catch { }
+            if ($age -eq $null) {
+                Warn ("recipe: " + $recipe + " answered but observed_at is not a timestamp (" + $stamp + ")")
+            } elseif ($age -gt 6) {
+                Warn ("recipe: " + $recipe + " answered but observed_at is {0:N1} h old ({1})" -f $age, $stamp)
+            } else {
+                Ok ("recipe: " + $recipe + " -> " + $row[1] + " " + $row[2] + ", " + ("{0:N1}" -f $age) + " h old")
+            }
+        }
+    } catch {
+        $code = $null
+        if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+        Bad ("recipe: " + $recipe + " query failed" + $(if ($code) { " (" + $code + ")" } else { "" }) + " - see infra/zetaris/README.md")
+    }
+} else {
+    Skip "recipe: no ZETARIS_API_KEY"
+}
+
 # --- Meterless runtime ---------------------------------------------------------------------
 $mbase = $cfg['MODEL_BASE_URL']
 if (-not $mbase -or $mbase -notmatch '127\.0\.0\.1|localhost') { $mbase = 'http://127.0.0.1:8088/v1' }

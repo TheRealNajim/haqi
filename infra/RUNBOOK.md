@@ -386,7 +386,8 @@ docker compose up -d
 | 25 Oct | `infra/healthcheck.ps1`: 12 pass + 1 WARN (no model provider), no secrets printed | PASS |
 | 25 Oct | `infra/zetaris/check-recipe.ps1`: 5 self-tests pass; live DESCRIBE against `NY_TAXI.customers` correctly rejected | PASS (no recipe yet) |
 | 25 Oct | Confirmed grammar: `SHOW LIGHTNING DATABASES`, `SHOW LIGHTNING TABLES <DB>`, `SHOW TABLES IN <DB>`, `DESCRIBE <DB>.<TABLE>`; metastore has 0 REST tables, 0 datasources | recorded in `infra/zetaris/README.md` |
-| 25 Oct | REST table registration path unproven in the bundle (no UI wizard, no OpenAPI); vendor command reference documents it | resolved same day |
+| 25 Oct | REST table registration path unproven in the bundle (no UI wizard); vendor command reference documents it | resolved same day |
+| 25 Oct | OpenAPI spec is live at `http://localhost:8888/redoc/docs.yaml`, HTTP Basic only — bearer key and UI JWT both 401 (284 paths). `/redoc/index.html` is the browsable page | recorded in `infra/zetaris/README.md` |
 | 25 Oct | `CREATE LIGHTNING DATABASE HAQI`, `CREATE LIGHTNING REST TABLE AIR_QUALITY`, `CREATE SCHEMASTORE VIEW air_quality_readings` via SQL editor | PASS — live |
 | 25 Oct | Recipe `haqi_views.air_quality_readings` returns the 5 contract columns in order; Open-Meteo PM2.5 15.0 ugm3, `observed_at` 15:00Z | PASS, checker exit 0 |
 | 25 Oct | `infra/backup.ps1` wrote dumps and restored both into throwaway databases, row counts matched | PASS (first drill, 185 + 10 tables) |

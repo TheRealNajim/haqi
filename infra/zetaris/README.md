@@ -99,6 +99,29 @@ Discovery, still valid:
 `SHOW DATABASES` and `SHOW LIGHTNING TABLES IN <DB>` are invalid and return an empty `400`.
 That is the parser, not auth.
 
+## The API spec (and the Cursor route)
+
+The bundle ships a full OpenAPI spec — it is just not discoverable without auth:
+
+```powershell
+# HTTP Basic with the UI account, NOT the bearer API key and NOT the UI JWT
+curl.exe -sS -u "admin@zetaris.com:<password>" `
+  http://localhost:8888/redoc/docs.yaml -o zetaris-docs.yaml
+```
+
+- `200`, ~628 KB, 284 paths. Save it outside the repo — it carries instance detail.
+- `redoc/docs.yaml` accepts **Basic auth only**. The `ak` key and a fresh UI `idToken` both
+  return `401`, which is why this looked like "no OpenAPI" on 25 Oct.
+- `http://localhost:8888/redoc/index.html` is the browsable version.
+
+Zetaris publishes its own Cursor/Codex/Claude Code connection guides
+(`zetaris/getting-started`, `docs/connections/`). Cursor is a **coding client** for the
+platform, not a runtime: it reads a repo `AGENTS.md`, keeps the connection in a gitignored
+`.env.local`, then runs the same REST or JDBC calls. `ZETARIS_REST_URL`,
+`ZETARIS_ORG_ID` and `ZETARIS_API_KEY` are the whole REST setup; the spec above is what its
+starter prompt fetches. Because our stack is on loopback, Cursor has to run on this PC (or
+through a tunnel) to see it.
+
 ## Still open
 
 The recipe unblocks the backend, but only for one metric and one point:

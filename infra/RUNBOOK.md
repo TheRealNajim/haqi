@@ -290,8 +290,25 @@ The expensive state is not the containers — it is `zetaris_pgdata` (metastore,
 registered sources) and the `.env` that holds the keypair password. Restarting is free; losing
 those is not.
 
+Nightly or before any risky change, with the stack running:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra\backup.ps1
+```
+
+It writes `backups\<timestamp>\` containing `metastore.dump`, `audit.dump`, a copy of the
+platform `.env`, and `restore-test.txt`. Then it proves the dumps: each one is loaded into a
+throwaway database, key tables are compared against live row counts, and the throwaway is
+dropped. The stack is never stopped. `backups/` is gitignored — treat the folder as a secret,
+because of the `.env` copy.
+
+First drill, 25 Oct: `metastore` restored 185 tables with `lightning_database` 2/2,
+`lightning_user_api_key` 2/2 and `filestore_table` 39/39; `audit` restored 10 tables. Pass.
+
+If `pg_dump` is not enough (for example the volume is corrupt), the cold path is a volume
+archive — this one does stop the stack:
+
 ```bash
-# Cold backup: stop services but keep volumes, then archive the volume and the bundle .env
 docker compose down
 docker run --rm -v zetaris_pgdata:/from -v "$PWD":/to alpine \
   tar czf /to/zetaris-pgdata-$(date +%F).tar.gz -C /from .
@@ -353,3 +370,4 @@ docker compose up -d
 | 25 Oct | `infra/zetaris/check-recipe.ps1`: 5 self-tests pass; live DESCRIBE against `NY_TAXI.customers` correctly rejected | PASS (no recipe yet) |
 | 25 Oct | Confirmed grammar: `SHOW LIGHTNING DATABASES`, `SHOW LIGHTNING TABLES <DB>`, `SHOW TABLES IN <DB>`, `DESCRIBE <DB>.<TABLE>`; metastore has 0 REST tables, 0 datasources | recorded in `infra/zetaris/README.md` |
 | 25 Oct | REST table registration path unproven: no UI wizard in this bundle, `CREATE LIGHTNING REST TABLE` rejected (empty 400), no OpenAPI | BLOCKED — question sent to coordinator |
+| 25 Oct | `infra/backup.ps1` wrote dumps and restored both into throwaway databases, row counts matched | PASS (first drill, 185 + 10 tables) |

@@ -5,7 +5,8 @@
 # Exit:   0 = all required checks pass, 1 = something is down.
 #
 # Covers: Docker engine, the four Zetaris services, the two one-shot jobs,
-# Zetaris UI, Zetaris REST with a real SQL round-trip, Meterless runtime.
+# Zetaris UI, Zetaris REST with a real SQL round-trip, the recipe view, Meterless
+# runtime (eligibility) and the configured model route end to end.
 # Secrets are read from .env and never printed.
 
 param([switch]$NoColor)
@@ -167,57 +168,78 @@ if ($key) {
     Skip "recipe: no ZETARIS_API_KEY"
 }
 
-# --- Meterless runtime ---------------------------------------------------------------------
-$mbase = $cfg['MODEL_BASE_URL']
-if (-not $mbase -or $mbase -notmatch '127\.0\.0\.1|localhost') { $mbase = 'http://127.0.0.1:8088/v1' }
-$mbase = $mbase.TrimEnd('/')
-$mroot = $mbase -replace '/v1$', ''
+# --- Meterless runtime (eligibility, independent of the model route) ------------------------
+# Meterless must be running for the event even when the product talks straight to NVIDIA,
+# so this check never depends on MODEL_BASE_URL.
+$mlroot = 'http://127.0.0.1:8088'
 try {
-    $hz = Invoke-RestMethod ($mroot + '/healthz') -TimeoutSec 5
-    if ($hz.status -eq 'ok') { Ok ("meterless: /healthz " + $mroot) } else { Bad "meterless: /healthz unexpected body" }
+    $hz = Invoke-RestMethod ($mlroot + '/healthz') -TimeoutSec 5
+    if ($hz.status -eq 'ok') { Ok ("meterless: /healthz " + $mlroot) } else { Bad "meterless: /healthz unexpected body" }
 } catch {
-    Bad ("meterless: not answering on " + $mroot + " - launch Nightshift")
+    Bad ("meterless: not answering on " + $mlroot + " - launch Nightshift")
 }
-if ($cfg['MODEL_API_KEY']) {
+
+# --- Model route (one route for all three settings) ----------------------------------------
+$mbase = ($cfg['MODEL_BASE_URL']).TrimEnd('/')
+$mmodel = $cfg['NEMOTRON_MODEL']
+$mkey = $cfg['MODEL_API_KEY']
+if (-not $mbase -or -not $mmodel -or -not $mkey) {
+    Skip "model route: MODEL_BASE_URL / MODEL_API_KEY / NEMOTRON_MODEL not all set"
+} else {
+    $mhost = ([uri]$mbase).Host
+    $localRoute = $mhost -match '^(127\.0\.0\.1|localhost)$'
+    $routeName = if ($localRoute) { 'meterless' } else { $mhost }
+
+    # Mixing routes is the failure this guard exists for: a Meterless model id sent to
+    # NVIDIA (or vice versa) answers 404 and reads like a broken model instead of bad config.
+    if ($localRoute -and $mmodel -like 'nvidia/*') {
+        Bad ("model route: NEMOTRON_MODEL " + $mmodel + " is a hosted id but MODEL_BASE_URL is local - routes mixed")
+    } elseif (-not $localRoute -and $mmodel -like 'meterless/*') {
+        Bad ("model route: NEMOTRON_MODEL " + $mmodel + " is a Meterless id but MODEL_BASE_URL is " + $mhost + " - routes mixed")
+    } else {
+        Ok ("model route: " + $routeName + " / " + $mmodel)
+    }
+
+    $mh = @{ Authorization = 'Bearer ' + $mkey }
     try {
-        $mh = @{ Authorization = 'Bearer ' + $cfg['MODEL_API_KEY'] }
-        $models = Invoke-RestMethod ($mbase + '/models') -Headers $mh -TimeoutSec 10
-        Ok ("meterless: /v1/models " + $models.data.Count + " ids")
+        $models = Invoke-RestMethod ($mbase + '/models') -Headers $mh -TimeoutSec 20
+        $ids = @($models.data)
+        if ($ids.id -contains $mmodel) {
+            Ok ("model route: id present in catalogue (" + $ids.Count + " ids)")
+        } else {
+            Bad ("model route: " + $mmodel + " not in " + $routeName + " catalogue (" + $ids.Count + " ids)")
+        }
     } catch {
         $code = $null
         if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
-        if ($code -eq 401 -or $code -eq 403) { Bad "meterless: token rejected (401/403) - refresh MODEL_API_KEY from proxy-token" }
-        else { Bad "meterless: /v1/models failed" }
+        if ($code -eq 401 -or $code -eq 403) { Bad ("model route: key rejected by " + $routeName + " (401/403) - replace MODEL_API_KEY") }
+        else { Bad ("model route: /models failed on " + $routeName + $(if ($code) { " (" + $code + ")" } else { "" })) }
     }
 
-    # /v1/models proves the hotspot is up; only a completion proves a provider is behind it.
-    $model = $cfg['NEMOTRON_MODEL']; if (-not $model) { $model = 'meterless/auto' }
+    # Only a completion proves a provider is behind the endpoint.
     try {
         $chatBody = @{
-            model      = $model
+            model      = $mmodel
             messages   = @(@{ role = 'user'; content = 'Reply with the single word: ready' })
-            max_tokens = 16
+            max_tokens = 400
         } | ConvertTo-Json -Depth 5 -Compress
-        $chatHeaders = @{
-            Authorization    = 'Bearer ' + $cfg['MODEL_API_KEY']
-            'meterless-app'  = 'haqi'
-            'meterless-scope' = 'user'
-        }
         $chat = Invoke-RestMethod ($mbase + '/chat/completions') -Method Post -ContentType 'application/json' `
-            -Headers $chatHeaders -Body $chatBody -TimeoutSec 90
-        $answer = $chat.choices[0].message.content
-        Ok ("model route: " + $model + " replied (" + ($answer -replace '\s+', ' ').Trim() + ")")
+            -Headers $mh -Body $chatBody -TimeoutSec 120
+        $answer = ([string]$chat.choices[0].message.content -replace '\s+', ' ').Trim()
+        if (-not $answer) {
+            Warn ("model route: " + $mmodel + " replied with empty content - check max_tokens and thinking mode")
+        } else {
+            Ok ("model route: " + $mmodel + " replied (" + $answer + ")")
+        }
     } catch {
         $code = $null
         if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
         if ($code -eq 400) {
-            Warn ("model route: " + $model + " has no provider - product answers fall back to the deterministic path")
+            Warn ("model route: " + $mmodel + " has no provider - product answers fall back to the deterministic path")
         } else {
-            Warn ("model route: " + $model + " did not answer" + $(if ($code) { " (" + $code + ")" } else { "" }))
+            Warn ("model route: " + $mmodel + " did not answer" + $(if ($code) { " (" + $code + ")" } else { "" }))
         }
     }
-} else {
-    Skip "meterless: MODEL_API_KEY empty in .env"
 }
 
 Write-Host ""

@@ -43,13 +43,16 @@ app = FastAPI(title="haqi", version="0.2.0")
 
 # Browser UIs (Vite dev on 5173, deployed frontend) must be able to call this
 # API; default = local dev origins only, override with HAQI_CORS_ORIGINS.
-_cors = os.getenv("HAQI_CORS_ORIGINS", "").strip()
-_origins = [o.strip() for o in _cors.split(",") if o.strip()] or \
-    ["http://localhost:5173", "http://127.0.0.1:5173"]
+def _cors_origins() -> list[str]:
+    v = os.getenv("HAQI_CORS_ORIGINS", "").strip()
+    return [o.strip() for o in v.split(",") if o.strip()] or \
+        ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
-    allow_methods=["GET", "OPTIONS"],
+    allow_origins=_cors_origins(),
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 

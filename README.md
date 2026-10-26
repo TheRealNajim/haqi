@@ -114,7 +114,7 @@ The submission-grade write-up is [SPONSOR.md](SPONSOR.md). Summary:
 | Criterion | Where it is answered |
 |---|---|
 | Impact (30) | a real user (asthma kid, Lagos) making a real decision; "why" is the product, not a feature |
-| Technical (20) | 64 tests incl. adversarial units horizons + ledger regressions; contract-versioned API |
+| Technical (20) | 66 tests incl. adversarial units horizons + ledger regressions; contract-versioned API |
 | Innovation (15) | evidence-chain-as-UI; unit-aware consensus; deterministic-verdict / LLM-narrates split |
 | Demo (15) | judge-testable at every step of the numbered route; live failure-flex on `/sources/status` |
 | Product & UX (10) | one question in, verdict + why out; no dashboard literacy required |
@@ -144,7 +144,7 @@ blind spot in plain words instead of guessing.
 cd backend && python -m pytest tests
 ```
 
-64 tests, offline-deterministic (the parse layer runs heuristics in tests so the
+66 tests, offline-deterministic (the parse layer runs heuristics in tests so the
 suite is never polluted by live keys; live-key behaviors are exercised with fake
 clients).
 

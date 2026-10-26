@@ -351,9 +351,10 @@ Caveats, in order of how likely they are to bite:
   an unreachable error rather than inventing a reading.
 - **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
   the REST port is the one meant to be called. Still: `/Stop` it after the event.
-- **A `configured: true` slot is not an integration.** `ZetarisAdapter` is still absent from
-  `backend/app/agent.py::_adapters_for` and `_sql_for()` still raises — see `infra/zetaris/README.md`
-  § Adapter wiring. Until that lands, the tunnel makes the badge green and changes no verdict.
+- **A `configured: true` slot is not an integration.** On `main` after `fc685f5`, `_sql_for()`
+  queries the recipe view, but `ZetarisAdapter` is still absent from
+  `backend/app/agent.py::_adapters_for` — see `infra/zetaris/README.md` § Adapter wiring. Until
+  that one line lands, the tunnel makes the badge green and changes no verdict.
 - The tunnel process is detached through a VBS `ShellExecute`. `Start-Process` and WMI both fail
   here: one holds the caller's console handle (piping hangs), the other kills cloudflared.
 
@@ -460,11 +461,11 @@ powershell -ExecutionPolicy Bypass -File infra\zetaris\check-recipe.ps1 -Table h
 only; WAQI/OpenAQ/OpenWeather/FIRMS wait on their API keys). The rules themselves are proven by
 `-SelfTest`, which needs no network.
 
-Publishing the name is necessary but **not sufficient**: `ZetarisAdapter` is not in the agent's
-adapter list (`backend/app/agent.py`, `_adapters_for`) and `_sql_for()` still raises "recipes
-pending". Until both change, `configured: true` on `/sources/status` is cosmetic and the
-sponsor layer contributes nothing to `/today`. The wiring snippet is in
-`infra/zetaris/README.md` § Adapter wiring.
+Publishing the name is necessary but **not sufficient**. On `main` after `fc685f5`, `_sql_for()`
+already queries this view in contract order — but `ZetarisAdapter` is still not in the agent's
+adapter list (`backend/app/agent.py`, `_adapters_for`). Until that one line lands,
+`configured: true` on `/sources/status` is cosmetic and the sponsor layer contributes nothing to
+`/today`. The wiring snippet is in `infra/zetaris/README.md` § Adapter wiring.
 
 ### Running the demo from this PC
 

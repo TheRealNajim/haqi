@@ -1,8 +1,7 @@
 # Zetaris Lightning recipes
 
-The backend adapter at `backend/app/adapters/zetaris.py` raises
-`zetaris: Lightning table recipes pending from infra` until infra publishes a queryable name
-whose first five columns are, in this order:
+The backend adapter at `backend/app/adapters/zetaris.py` is ready for a queryable name whose first
+five columns are, in this order:
 
 | # | Column | Type | Meaning |
 |---|---|---|---|
@@ -124,14 +123,15 @@ through a tunnel) to see it.
 
 ## Adapter wiring (backend change, not infra)
 
-Publishing the table name is not enough. Two things in `backend/` keep the slot cosmetic:
+Publishing the table name is not enough. **State on `main` after `fc685f5` (26 Oct):** one of the
+two edits has landed, one has not.
 
-1. `ZetarisAdapter` is not in the agent's adapter list (`app/agent.py`, `_adapters_for`), so it
-   is never gathered.
-2. `ZetarisAdapter._sql_for()` raises "recipes pending", so even if it were gathered it would
-   produce no rows.
+1. **Done.** `ZetarisAdapter._sql_for()` queries `haqi_views.air_quality_readings` in contract
+   order. Given rows, the mapper produces evidence.
+2. **Still missing.** `ZetarisAdapter` is not in the agent's adapter list
+   (`app/agent.py`, `_adapters_for`), so it is never gathered and `/today` never calls it.
 
-The changes, against the contract this recipe already satisfies:
+The remaining change, against the contract this recipe already satisfies:
 
 ```python
 # app/agent.py
@@ -146,17 +146,14 @@ def _adapters_for(profile: Profile) -> list[BaseAdapter]:
     return adapters
 ```
 
-```python
-# app/adapters/zetaris.py
-def _sql_for(self, lat: float, lon: float) -> str:
-    return ("SELECT source_id, raw_value, unit, distance_km, observed_at "
-            "FROM haqi_views.air_quality_readings")
-```
+Check `configured()`'s real name/signature in `app/adapters/zetaris.py` before pasting — the
+adapter already gates on `ZETARIS_REST_URL` / `ZETARIS_API_KEY` presence inside `gather()`, so a
+plain `ZetarisAdapter()` appended unconditionally also works and fails loudly when unset.
 
-`distance_km` is `NULL` and `observed_at` is an ISO string with `Z`; `_to_evidence` already
-parses both. The view holds one Lagos point, so this is honest evidence for Lagos and
-misleading for any other coordinate — add a `WHERE` clause or a per-city view before the
-product is asked about another city.
+`_sql_for()` keeps `distance_km` as `NULL` and `observed_at` as an ISO string with `Z`;
+`_to_evidence` already parses both. The view holds one Lagos point, so this is honest evidence
+for Lagos and misleading for any other coordinate — add a `WHERE` clause or a per-city view
+before the product is asked about another city.
 
 ## Still open
 

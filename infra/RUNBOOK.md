@@ -167,6 +167,25 @@ deleted and replaced by `haqi-backend-20261026` (org 1, 5-year expiry). The leak
 returns `400` from the query engine, so the copy sitting in git history is inert. Never
 paste the value into docs, commits or chat; regenerate with the steps above if it leaks again.
 
+### After any stack restart
+
+A restart can leave every container `healthy` while two things are silently gone: the API key
+row and the recipe catalog. Both were lost on 26 Oct and nothing in `docker ps` said so. Run
+these before blaming the backend or the adapter:
+
+```powershell
+powershell -NoProfile -File infra/zetaris/restore-key.ps1
+powershell -NoProfile -File infra/zetaris/ensure-recipe.ps1
+powershell -NoProfile -File infra/healthcheck.ps1
+```
+
+Both repair scripts are idempotent — they probe first and only write what is missing. `verify.sh`
+is not enough on its own: it signs in with the admin password, so it passes 9/9 even when the
+REST key and the recipe are gone.
+
+**Do not run `docker compose up` during the demo window.** A re-run can reset the catalog, and
+the recovery is two scripts plus a minute of waiting.
+
 ## 3. Meterless and the Nemotron route
 
 Option A — Meterless runtime on this PC (the hackathon route). Meterless for Windows ships as

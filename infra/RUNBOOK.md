@@ -421,6 +421,54 @@ powershell -ExecutionPolicy Bypass -File infra\zetaris\check-recipe.ps1 -Table h
 only; WAQI/OpenAQ/OpenWeather/FIRMS wait on their API keys). The rules themselves are proven by
 `-SelfTest`, which needs no network.
 
+Publishing the name is necessary but **not sufficient**: `ZetarisAdapter` is not in the agent's
+adapter list (`backend/app/agent.py`, `_adapters_for`) and `_sql_for()` still raises "recipes
+pending". Until both change, `configured: true` on `/sources/status` is cosmetic and the
+sponsor layer contributes nothing to `/today`. The wiring snippet is in
+`infra/zetaris/README.md` § Adapter wiring.
+
+### Running the demo from this PC
+
+The deployed API cannot see Zetaris on `127.0.0.1:8888`, so its Zetaris slot is an honest
+blind no matter what key is pasted into Render. There are two topologies:
+
+| | Run here | Deployed (Render) |
+|---|---|---|
+| Zetaris slot | real, over loopback | blind — needs a tunnel |
+| Other sources | only if their keys are in `.env` | OpenAQ, Weather, Fire live |
+| Nemotron | NVIDIA hosted | NVIDIA hosted |
+| Network exposure | none (loopback only) | public |
+
+With the source keys in `.env` and the adapter wired, running here is the only topology where
+every slot is genuine. One command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1          # preflight, then start
+powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1 -Status  # what is listening
+powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1 -Stop    # stop api + web
+```
+
+It refuses to start when the product keys are missing, because `/today` would then answer
+`0/4 sources` — a worse demo than the deployed one. `-Force` starts anyway. On start it also
+re-runs `restore-key.ps1` and `ensure-recipe.ps1`, so a stack restart between runs cannot leave
+you with a dead key or a missing view.
+
+What it starts, and why each flag matters:
+
+- **api** — `.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`.
+  Loopback only, unlike `uvicorn --host 0.0.0.0`.
+- **web** — `npm run dev -- --host 127.0.0.1 --port 5173` with
+  `VITE_API_PROXY_TARGET=http://127.0.0.1:8000`. The dev server always calls same-origin `/api`
+  and proxies it to that target; without the variable it proxies to the deployed API and you
+  are back to the blind slot. Vite binds every interface by default — the `--host` flag is what
+  keeps it on loopback.
+- Launchers, PIDs and logs live in `%LOCALAPPDATA%\haqi-demo\` (`api.log`, `web.log`). The
+  children are created through WMI, not `Start-Process`, so piping this script's output does
+  not hang waiting for a server that never exits.
+
+`Zetaris` and `Meterless` are not touched by the script; they keep running for eligibility
+either way.
+
 ## 7. Backup and recovery
 
 The expensive state is not the containers — it is `zetaris_pgdata` (metastore, accounts, audit,

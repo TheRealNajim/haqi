@@ -122,6 +122,42 @@ platform, not a runtime: it reads a repo `AGENTS.md`, keeps the connection in a 
 starter prompt fetches. Because our stack is on loopback, Cursor has to run on this PC (or
 through a tunnel) to see it.
 
+## Adapter wiring (backend change, not infra)
+
+Publishing the table name is not enough. Two things in `backend/` keep the slot cosmetic:
+
+1. `ZetarisAdapter` is not in the agent's adapter list (`app/agent.py`, `_adapters_for`), so it
+   is never gathered.
+2. `ZetarisAdapter._sql_for()` raises "recipes pending", so even if it were gathered it would
+   produce no rows.
+
+The changes, against the contract this recipe already satisfies:
+
+```python
+# app/agent.py
+def _adapters_for(profile: Profile) -> list[BaseAdapter]:
+    adapters: list[BaseAdapter] = [OpenAQAdapter(), WeatherAdapter(), FireAdapter()]
+    if profile.name == "pollen_allergy":
+        adapters.append(PollenAdapter())
+    adapters.append(AdvisoryAdapter())
+    from app.adapters.zetaris import ZetarisAdapter, configured as zetaris_configured
+    if zetaris_configured():          # same shape as the other config-gated sources
+        adapters.append(ZetarisAdapter())
+    return adapters
+```
+
+```python
+# app/adapters/zetaris.py
+def _sql_for(self, lat: float, lon: float) -> str:
+    return ("SELECT source_id, raw_value, unit, distance_km, observed_at "
+            "FROM haqi_views.air_quality_readings")
+```
+
+`distance_km` is `NULL` and `observed_at` is an ISO string with `Z`; `_to_evidence` already
+parses both. The view holds one Lagos point, so this is honest evidence for Lagos and
+misleading for any other coordinate — add a `WHERE` clause or a per-city view before the
+product is asked about another city.
+
 ## Still open
 
 The recipe unblocks the backend, but only for one metric and one point:

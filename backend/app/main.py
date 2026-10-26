@@ -154,7 +154,36 @@ ADAPTERS: list[tuple[type[BaseAdapter], str, str, list[str]]] = [
      ["BRIGHTDATA_API_KEY"]),
 ]
 
-ZETARIS_ROLE = "sponsor SQL layer (Lightning tables; recipes pending infra)"
+ZETARIS_ROLE = "sponsor SQL layer (Lightning REST via the infra tunnel)"
+
+_ZETA_CACHE: tuple[float, bool | None] | None = None
+_PROBE_TTL = 60.0
+_PROBE_TIMEOUT = 2.0
+
+
+async def _probe_reachable(url: str | None) -> bool | None:
+    """Liveness for a routable sponsor slot. Any HTTP answer counts (a 401/404
+    from the server still proves it is up); connect/timeout errors count as
+    down. Cached 60s so a judge refresh is never a 2s wait. None = not armed."""
+    import time
+
+    global _ZETA_CACHE
+    if not url:
+        return None
+    if _ZETA_CACHE and time.monotonic() - _ZETA_CACHE[0] < _PROBE_TTL:
+        return _ZETA_CACHE[1]
+    import httpx
+
+    result = None
+    try:
+        async with httpx.AsyncClient(timeout=_PROBE_TIMEOUT) as cli:
+            r = await cli.get(url)
+            result = True  # any status at all = server answered
+            _ = r
+    except Exception:
+        result = False
+    _ZETA_CACHE = (time.monotonic(), result)
+    return result
 
 
 def _sources_summary() -> list[dict]:
@@ -195,8 +224,18 @@ def _sources_summary() -> list[dict]:
 
 @app.get("/sources/status")
 async def sources_status() -> dict:
-    """The failure-flex demo reads this: which sources are armed, which are blind."""
-    return {"schema_version": 1, "sources": _sources_summary()}
+    """The failure-flex demo reads this: which sources are armed, which are blind.
+    Zetaris adds a liveness `reachable` field: env-armed != host-up, and an
+    async judge deserves the difference stated."""
+    out = {"schema_version": 1, "sources": _sources_summary()}
+    from app.adapters.zetaris import configured as zetaris_configured
+
+    if zetaris_configured():
+        zeta = next(s for s in out["sources"]
+                    if s["adapter"] == "ZetarisAdapter")
+        zeta["reachable"] = await _probe_reachable(
+            os.getenv("ZETARIS_REST_URL"))
+    return out
 
 
 @app.get("/health")

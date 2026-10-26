@@ -29,3 +29,11 @@ services:
         value: serp_api1
       - key: HAQI_LOCATION_NAME
         value: Lagos
+      # Nemotron parse route — NVIDIA hosted (build.nvidia.com); MODEL_API_KEY
+      # value is account-secret, entered in the dashboard or via Render API.
+      - key: MODEL_BASE_URL
+        value: https://integrate.api.nvidia.com/v1
+      - key: MODEL_API_KEY
+        sync: false
+      - key: NEMOTRON_MODEL
+        value: nvidia/nemotron-3.5-bolt-e4b

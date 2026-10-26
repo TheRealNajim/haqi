@@ -32,8 +32,11 @@ def _payload_far(steps_hours_out=(3, 6, 9, _FAR_HOURS)):
 def test_far_target_raises_even_when_steps_exist():
     ad = WeatherAdapter()
     ad.api_key = "test"
+    # +6h stays beyond the 3h(+1) ceiling for ANY device clock (at >=18h local
+    # the raw hour wraps to tomorrow — still 18h ahead, still far), so this test
+    # is clock-independent (the old +21h clamped to 23:00 = near-horizon).
     with pytest.raises(AdapterError):
-        ad._to_evidence(_payload_far(), target_hour=datetime.now().hour + 21)
+        ad._to_evidence(_payload_far(), target_hour=(datetime.now().hour + 6) % 24)
 
 
 def test_near_target_uses_bucket():

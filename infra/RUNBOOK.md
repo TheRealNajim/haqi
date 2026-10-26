@@ -11,6 +11,10 @@ happen. The gate this runbook exists to clear (infra/AGENTS.md):
   (they report SKIP, not FAIL, while unset)
 - Env values reach the deployed API through the **Render dashboard**, never chat or git
 
+Note (26 Oct): that list is the gate for the **infra work**, not for the demo. The demo is
+Render-only — Zetaris and Meterless are disclosed blinds in the deployed API and nothing on this
+PC is on its request path. Both statements are deliberate; §4 explains why and what it costs.
+
 Last verified state: see [Status](#status) at the bottom. Update it every session.
 
 ## 1. Machine and prerequisites
@@ -188,7 +192,8 @@ the recovery is two scripts plus a minute of waiting.
 
 ## 3. Meterless and the Nemotron route
 
-Option A — Meterless runtime on this PC (the hackathon route). Meterless for Windows ships as
+Option A — Meterless runtime on this PC (installed during the event; **not** the demo path — see
+§4). Meterless for Windows ships as
 the Nightshift runtime app (Windows 10/11 64-bit, dedicated GPU: CUDA on NVIDIA, Vulkan on
 others): <https://www.meterless.ai/windows.html>.
 
@@ -216,8 +221,10 @@ Installed and running (25 Oct):
 Decision taken 25 Oct (backend lead): the product answers run on **NVIDIA hosted**
 (build.nvidia.com), not Meterless. This PC has no dedicated GPU, so a hosted route is the
 honest one; Meterless cannot serve it anyway — none of its 73 ids is `nvidia/nemotron-*`.
-Meterless stays installed and running only because eligibility requires it running during the
-event. Never mix: all three `MODEL_*` values come from the NVIDIA route below.
+Meterless stays installed and running because eligibility requires it running during the event,
+and because it is the only way to prove the narration lane locally. Since 26 Oct the deployed API
+does not depend on it either: the Meterless slot there is a disclosed blind (§4). Never mix: all
+three `MODEL_*` values come from the NVIDIA route below.
 
 Runtime checks:
 
@@ -302,9 +309,10 @@ python backend/smoke_test.py     # from the repo root
 | INFRA Zetaris SQL over REST | SKIP while `ZETARIS_*` is unset; PASS once set |
 | INFRA Nemotron replies | SKIP while `MODEL_*` is unset; PASS once the NVIDIA route works |
 
-Exit 0 unless an INFRA check is configured and broken. The real gate is not "everything PASS" —
-it is `POST /sources/status` showing the Zetaris and Nemotron slots as `configured: true`, with
-every other slot either configured or an explicit environmental blind.
+Exit 0 unless an INFRA check is configured and broken. Two different gates, do not confuse them:
+**locally** the goal is 6 PASS + the Zetaris and Nemotron slots green in `smoke_test.py`; **in the
+deployed demo** the goal is `GET /sources/status` where every slot is either `configured: true` or
+an explicit, disclosed blind — which since 26 Oct includes Zetaris and Meterless (next section).
 
 ### Delivering values to the deployed API
 
@@ -314,14 +322,66 @@ Keys go in **Render → haqi-api → Environment**, never chat and never a commi
 - `backend/.env.example` and `render.yaml` list the names; `sync: false` makes Render ask for
   each value when the blueprint applies.
 - Render cannot reach this PC. The loopback value `ZETARIS_REST_URL=http://localhost:8888/api/v1.0`
-  is dead from Render — use the tunnel below, and never paste the loopback URL into the dashboard
-  and call the slot armed.
+  is dead from Render. Under the 26 Oct decision the deployed slot is **deliberately unset**, so
+  `/sources/status` reports `configured: false` — a disclosed blind, not a broken integration. Do
+  not paste a tunnel hostname there for the demo; a set-but-dead slot is worse than an unset one
+  (it puts a failure message in `/today` instead of a clean blind).
 - Free-tier disk is ephemeral: `HAQI_DATA_DIR` (the trust ledger) does not survive a redeploy.
 
-#### Exposing Zetaris to Render (quick tunnel)
+#### What the deployed demo actually runs (26 Oct decision)
 
-The deployed API is the product, so the Zetaris slot there needs a public URL. `cloudflared`
-puts one in front of the loopback REST port:
+The demo runs on `https://haqi-api.onrender.com` and **nothing on this PC is on its request
+path**. No tunnel, no Docker, no Nightshift. Close the lid, unplug the charger, or hand the laptop
+to someone else — `/today` answers the same.
+
+| Slot | Deployed state | What a judge sees |
+|---|---|---|
+| OpenAQ (+ WAQI fallback) | `configured: true` | live Lagos station readings |
+| OpenWeather | `configured: true` | 3 h wind / dispersion forecast |
+| NASA FIRMS | `configured: true` | satellite smoke hotspots |
+| Nemotron parse (NVIDIA hosted) | not a `/sources/status` row | question parsing, not a source |
+| Zetaris SQL layer | unset → `configured: false` | **disclosed blind** |
+| Meterless narration | unset → `configured: false` | **disclosed blind** |
+| Bright Data advisory | no key → `configured: false` | disclosed blind |
+| Pollen | no key → `configured: false` | disclosed blind, Europe-only by design |
+
+Measured 26 Oct: the first four rows are live; Zetaris is still `configured: true` against a
+hostname that no longer resolves, so `/today` carries one `zetaris unreachable` line in
+`blind_spots`. Rows 5 and 6 are the target, one dashboard edit away (steps below).
+
+Why the two sponsor slots are dropped rather than kept alive: both integrations require this
+machine. Zetaris is a four-container Docker stack with a loopback REST port; Nightshift has no
+cloud edition at all (its own site: *"runs on the Mac, Windows PC or DGX Spark you already own"*).
+Keeping either one live means the demo depends on a laptop being open, awake and online through
+the whole judging window — a bet that has already been lost once to a closed lid.
+
+Say it out loud before a judge finds it. If the rules require both sponsors **running and used**,
+this configuration loses on eligibility; it does not lose on honesty. What must never happen is
+the reverse: a `configured: true` badge over a dead host, or a laptop serving data while the
+pitch says cloud-only.
+
+**Hand this to whoever owns the Render dashboard** (it is the only part of this decision that
+cannot be done from the repo):
+
+1. Render → haqi-api → Environment: delete `ZETARIS_REST_URL`, `ZETARIS_ORG_ID`,
+   `ZETARIS_USERNAME`, `ZETARIS_PASSWORD` and `ZETARIS_API_KEY` if present. Do **not** paste a
+   tunnel URL in their place.
+2. Leave `METERLESS_BASE_URL`, `METERLESS_API_KEY` and `METERLESS_MODEL` absent. `render.yaml` no
+   longer declares them, so a blueprint sync will not prompt for them either.
+3. Redeploy after step 1. This is not cosmetic: **the deployed build already has the wired
+   adapter**, and it is already calling the row. Measured 26 Oct, `/today` carries
+   `zetaris unreachable: [Errno -2] Name or service not known` in `blind_spots` while
+   `/sources/status` reports `configured: true` — a stored hostname that no longer resolves.
+   Deleting the rows and redeploying is what removes that line.
+4. Confirm `GET /sources/status` shows `ZetarisAdapter` and `MeterlessNarration` both
+   `configured: false`, and `GET /today` carries no `zetaris` entry in `blind_spots`.
+
+#### The Zetaris tunnel (local proof only — not armed in the demo)
+
+`cloudflared` puts a public https URL in front of the loopback REST port. It was built, rehearsed
+and verified on 26 Oct and then taken out of the deployed path by the same day's decision. Nothing
+in Render points at it. Use it to prove the stack from outside this machine, or to re-arm the
+sponsor slot if the decision ever reverses — not to serve the demo.
 
 ```powershell
 powershell -NoProfile -File infra\zetaris\tunnel.ps1          # status + the rows to paste
@@ -330,7 +390,7 @@ powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Stop
 ```
 
 `-Start` prints the three rows and proves the tunnel with a real `SELECT 1` through the public
-hostname. Paste into Render → Environment, then redeploy:
+hostname. Those rows are only for re-arming; under the current decision, do not paste them:
 
 ```
 ZETARIS_REST_URL=https://<random>.trycloudflare.com/api/v1.0
@@ -354,20 +414,25 @@ powershell -NoProfile -File infra\zetaris\install-autostart.ps1 -Remove  # undo
 
 Rehearsed 26 Oct: `-Stop`, then `Start-ScheduledTask haqi-zetaris-tunnel` → new hostname in 13 s,
 `SELECT 1` → `1`, recipe row `17.4 ugm3 @ 18:00Z`, no key → `400`. The task restores *a* tunnel,
-never the *same* URL — Render still needs the new hostname by hand.
+never the *same* URL — re-arming Render would still need the new hostname by hand.
+
+Under the Render-only decision the task is convenience for local proof, not demo infrastructure.
+It keeps opening a public hostname onto this PC every logon for a slot nothing consumes, so
+`-Remove` when the tunnel is no longer being demonstrated.
 
 Caveats, in order of how likely they are to bite:
 
 - **The hostname changes on every cloudflared restart.** Quick tunnels are anonymous; there is
-  no stable name without a Cloudflare account. After a restart, re-run `-Start` and update
-  `ZETARIS_REST_URL` in Render + redeploy. Nothing on this PC can update Render by itself — there
-  is no Render API key here.
+  no stable name without a Cloudflare account. After a restart, re-run `-Start`, then — only if
+  the slot is armed — update `ZETARIS_REST_URL` in Render and redeploy. Nothing on this PC can
+  update Render by itself: there is no Render API key here.
 - **This laptop must stay awake, online and open.** AC standby and hibernate are off, but the
   Zenbook's firmware exposes no lid-close setting (`LIDACTION` does not exist in the power
   scheme), so closing the lid sleeps it and the tunnel dies. Leave the lid open and the charger
-  plugged in for the whole judging window.
-- **If cloudflared dies, Render's Zetaris slot fails loudly**, not silently: the adapter raises
-  an unreachable error rather than inventing a reading.
+  plugged in for as long as the tunnel is meant to answer.
+- **If cloudflared dies while the slot is armed, `/today` says so** — the adapter raises
+  `zetaris unreachable` into the verdict's `blind_spots` rather than inventing a reading. With the
+  slot unset (the decision above) that failure mode does not exist.
 - **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
   the REST port is the one meant to be called. Still: `/Stop` it after the event.
 - **A `configured: true` slot is not the same as data.** `2f2ec83` put `ZetarisAdapter` in
@@ -376,37 +441,53 @@ Caveats, in order of how likely they are to bite:
 - The tunnel process is detached through a VBS `ShellExecute`. `Start-Process` and WMI both fail
   here: one holds the caller's console handle (piping hangs), the other kills cloudflared.
 
-#### If this PC is down during the demo
+#### Reversing the decision — what re-arming costs
 
-The product does not depend on this machine. The deployed API on Render keeps serving `/today`
-from OpenAQ, OpenWeather and NASA FIRMS, which call the internet directly and report
-`configured: true` on their own. What is lost is the **Zetaris slot** and the claim that
-**Meterless is running during the event** — both are eligibility claims, not app functionality.
+Both slots can be re-armed in minutes; what cannot be bought back in minutes is the dependency
+they create. Recorded here so nobody re-arms in a panic without reading the price.
 
-Say it plainly rather than hiding it: the Zetaris SQL layer lives on the infra host and its
-quick-tunnel URL died with the host. Do not present a `configured: true` badge as a working
-integration; a slot that errors is a disclosed blind, a green badge over nothing is a false claim.
-Recovery order: reopen the laptop, confirm Docker is up, run `tunnel.ps1 -Start`, relay the new
-hostname, redeploy Render. Budget two minutes, and only if the person who owns the Render
-dashboard is reachable.
+**Zetaris** — laptop open, Docker up, `tunnel.ps1 -Start`, paste the three rows, redeploy. Two
+minutes, and from then on the sponsor slot answers only while that laptop stays awake, online and
+reachable. If cloudflared dies, `/today` carries `zetaris unreachable` in `blind_spots` until
+someone notices and restarts it.
 
-#### The Meterless narration lane is not armed (26 Oct)
+**Meterless** — longer, because there are no weights on disk: download a model in
+Setup → Runtime, prove one `200` completion on `127.0.0.1:8088`, then tunnel 8088 and paste three
+rows. Until that completion answers `200`, arming it is worse than leaving it off.
+
+Both reverse just as cleanly: delete the rows in Render → Environment and redeploy, and
+`/sources/status` goes back to `configured: false` — a blind a judge can read, rather than an
+error a judge has to interpret.
+
+If **Render itself** is down there is no public fallback: the deployed API is the product. The
+local runner in §6 is for showing a judge the same verdicts from this PC, not for standing in for
+the public URL.
+
+#### The Meterless narration lane is off — and cannot be on in a Render-only demo (26 Oct)
 
 `/why` can carry a `story_by` paragraph written by Nightshift (`agent/llm.py:narrate_why`). It is
-the only place the Meterless sponsor appears in the product, and it is **off for an honest
-reason**, not for lack of wiring.
+the only place the Meterless sponsor appears in the product. It has two independent blockers, and
+only one of them is a missing download:
 
 - It arms only when `METERLESS_BASE_URL`, `METERLESS_API_KEY` and `METERLESS_MODEL` all exist.
   Miss one and the lane is skipped; `/why` keeps its deterministic graph.
-- Nightshift itself is up: `node host.mjs` listens on `127.0.0.1:8088`, `/healthz` returns 200,
-  `/v1/models` returns **401 without the proxy token** and 73 model ids with it.
-- Every completion returns `503 local_runtime_not_ready`: the local runtime lane on `127.0.0.1:11435`
-  reports `health=offline`, and `models_dir` holds only `.part` stubs (~4 MB each), so there are no
-  weights to load.
-- The tunnel half is proven working: `tunnel.ps1 -Start -Port 8088 -StatePrefix meterless` gave a
-  public hostname answering `/healthz` 200, `/v1/models` 401 without the key, 73 ids with it.
-  It was stopped again — pointing Render at a lane that answers 503 would advertise a broken
-  feature, and a narration lane that always fails adds nothing to `/why`.
+- **No weights.** Nightshift is up: `node host.mjs` listens on `127.0.0.1:8088`, `/healthz` returns
+  200, `/v1/models` returns **401 without the proxy token** and 73 model ids with it. But every
+  completion returns `503 local_runtime_not_ready`: the lane on `127.0.0.1:11435` reports
+  `health=offline` and `models_dir` holds only `.part` stubs (~4 MB each). A 770 MB
+  `Llama-3.2-1B-Instruct` GGUF was started from Hugging Face and **cancelled at 198 MB** when the
+  Render-only decision landed — enough hardware evidence that a half-installed model is not worth
+  carrying into judging.
+- **No cloud edition.** Meterless's own site: *"Nightshift runs on the Mac, Windows PC or DGX
+  Spark you already own"*, with 0 bytes sent to a cloud service. The free web edition runs models
+  in a browser tab, not as an OpenAI-compatible endpoint. So there is nowhere to host this lane
+  except a machine we have decided not to depend on. That is a property of the product, not a
+  missing key.
+
+The transport half is proven, for the day the decision reverses:
+`tunnel.ps1 -Start -Port 8088 -StatePrefix meterless` produced a public hostname answering
+`/healthz` 200, `/v1/models` 401 without the token and 73 ids with it, and correct isolation from
+the Zetaris tunnel (stopping one leaves the other alive).
 
 To arm it, in this order:
 
@@ -415,10 +496,10 @@ To arm it, in this order:
 #    POST 127.0.0.1:8088/v1/chat/completions  {model: "local-runtime/<id>", ...}
 # 2. Only once that returns 200:
 powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Start -Port 8088 -StatePrefix meterless
-# 3. Paste the three rows it prints into Render, then redeploy.
+# 3. Paste the three rows it prints into Render, then redeploy - and keep the laptop awake.
 ```
 
-Hardware reality check: this laptop reports 15.6 GB RAM with ~2.7 GB free and ~7 GB of swap at
+Hardware reality check: this laptop reports 15.6 GB RAM with ~3 GB free and ~7 GB of swap at
 measurement. A `local-runtime/*` 30B id will not fit; the smallest instruct model is the only
 candidate. Do not fill the three env vars with guesses to make a badge green.
 
@@ -525,28 +606,29 @@ powershell -ExecutionPolicy Bypass -File infra\zetaris\check-recipe.ps1 -Table h
 only; WAQI/OpenAQ/OpenWeather/FIRMS wait on their API keys). The rules themselves are proven by
 `-SelfTest`, which needs no network.
 
-Publishing the name is necessary but **not sufficient**. On `main` after `fc685f5`, `_sql_for()`
-already queries this view in contract order — but `ZetarisAdapter` is still not in the agent's
-adapter list (`backend/app/agent.py`, `_adapters_for`). Until that one line lands,
-`configured: true` on `/sources/status` is cosmetic and the sponsor layer contributes nothing to
-`/today`. The wiring snippet is in `infra/zetaris/README.md` § Adapter wiring.
+Publishing the name is necessary but **not sufficient**. `_sql_for()` queries this view in
+contract order and `2f2ec83` put `ZetarisAdapter` into `_adapters_for`, so on `main` the sponsor
+layer does reach `/today` — when the slot is configured. In the deployed demo it is deliberately
+unset, so it contributes nothing there **by decision, not by omission**; the recipe still proves
+out locally. Wiring detail: `infra/zetaris/README.md` § Adapter wiring.
 
-### Running the demo from this PC
+### Running the demo from this PC (proof tool, not the demo)
 
-The deployed API cannot see Zetaris on `127.0.0.1:8888`, so its Zetaris slot is an honest
-blind no matter what key is pasted into Render. There are two topologies:
+The deployed API cannot see Zetaris on `127.0.0.1:8888`, so its Zetaris slot stays unset there.
+Loopback is the only topology where every slot is genuinely live:
 
 | | Run here | Deployed (Render) |
 |---|---|---|
-| Zetaris slot | real, over loopback | blind — needs a tunnel |
+| Zetaris slot | real, over loopback | unset — disclosed blind |
+| Meterless narration | available once weights exist | unset — disclosed blind |
 | Other sources | only if their keys are in `.env` | OpenAQ, Weather, Fire live |
 | Nemotron | NVIDIA hosted | NVIDIA hosted |
 | Network exposure | none (loopback only) | public |
 
-With the source keys in `.env` and the adapter wired, running here is the only topology where
-every slot is genuine. **Decision taken 26 Oct: the demo runs on the deployed API, with Zetaris
-reached through the quick tunnel (§4).** This local runner stays documented as the fallback for
-the case where the tunnel or Render is down — it needs no network path at all. One command:
+**Decision taken 26 Oct: the demo runs on the deployed API with both sponsor slots disclosed as
+blinds (§4); no machine of ours is on its request path.** This local runner is how you show a
+judge that Zetaris really answers SQL, and it is the only way to demo the product if Render is
+down — it needs no network path at all. One command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1          # preflight, then start
@@ -633,6 +715,8 @@ docker compose up -d
 | New install logs `password authentication failed` | a previous install's `zetaris_pgdata` volume is being reused with a different `POSTGRES_PASSWORD`: `docker compose down -v` (destroys data) or restore the old password |
 | `smoke_test.py` Nemotron FAIL | all three `MODEL_*` must come from one route; check `/v1/models` first, then the model id spelling |
 | Meterless chat `400 no_provider_configured` | runtime is up but nothing serves the route: add a cloud key in the app's Setup (Meterless credit or NVIDIA) or install/start a local model. `/healthz` 200 does not cover this |
+| `/today` `blind_spots` says `zetaris unreachable` | the slot is set but the host behind it is dead. Either bring the tunnel back on the infra PC, or — for the Render-only demo — delete `ZETARIS_REST_URL`, `ZETARIS_ORG_ID` and `ZETARIS_API_KEY` in Render and redeploy, so the slot reads `configured: false` instead of failing |
+| `/sources/status` says Zetaris `configured: true` but the host does not resolve | current state, 26 Oct: the dashboard holds a hostname that no longer exists, so `/today` carries `zetaris unreachable: [Errno -2] Name or service not known` in `blind_spots`. Unset the `ZETARIS_*` rows and redeploy; do not chase a URL that is gone |
 
 ## 9. Status
 
@@ -674,3 +758,10 @@ docker compose up -d
 | 25 Oct | Root `.env.example` reconciled with `backend/.env.example`: `HAQI_CORS_ORIGINS`, `HAQI_LOCATION_NAME`, `BRIGHTDATA_SERP_ZONE`, `HAQI_DATA_DIR` present; NVIDIA route spelled out | done — names now match contract v1.2+ |
 | 25 Oct | Runbook corrected: own `.env` loader (no python-dotenv), split smoke-test expectations, NVIDIA route decided, Render dashboard as the delivery path | done |
 | 25 Oct | Backend lead's message commit (`c1bea7c`) read: Render is live, NVIDIA hosted is the route, keys go to the dashboard | acted on |
+| 26 Oct | Zetaris `ak` key rotated (`haqi-backend-20261026`); the previously exposed token now answers `400`; recipe `haqi_views.air_quality_readings` still live | PASS |
+| 26 Oct | `infra/healthcheck.ps1` 14/14 PASS, `backend/smoke_test.py` 8/8 PASS (6 LOCAL + Zetaris + Nemotron), `verify.sh` 9/9 | PASS |
+| 26 Oct | Quick tunnel verified end to end: `SELECT 1` → `1`, recipe row `17.4 ugm3`, no key → `400`; autostart task restores a tunnel in 13 s after a reboot drill | PASS |
+| 26 Oct | `ZetarisAdapter` wired into `_adapters_for` (`2f2ec83`); `/health` on Render lists it, so the deployed build already runs the wired adapter | done |
+| 26 Oct | Live `/today`: served by OpenAQ + WAQI + OpenWeather + FIRMS, but `blind_spots` carries `zetaris unreachable: [Errno -2] Name or service not known` — dashboard holds a dead hostname while `/sources/status` says `configured: true` | open — needs the Render rows deleted |
+| 26 Oct | Nightshift: `/healthz` 200, `/v1/models` 401 without token / 73 ids with it, completions `503 local_runtime_not_ready` (no weights) | recorded |
+| 26 Oct | **Decision: the demo is Render-only.** `/today` served by OpenAQ + OpenWeather + FIRMS; Zetaris and Meterless unset in Render and disclosed as blinds; no PC on the request path | done |

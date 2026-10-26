@@ -37,12 +37,23 @@ services:
         sync: false
       - key: NEMOTRON_MODEL
         value: nvidia/nemotron-3.5-bolt-e4b
-      # Meterless narration lane (optional, sponsor Build/Power layer): the /why story only.
-      # All three or none - empty keeps the lane off and /why keeps its deterministic graph.
-      # Leave unset until Nightshift on the infra host can actually serve a completion.
-      - key: METERLESS_BASE_URL
-        sync: false
-      - key: METERLESS_API_KEY
-        sync: false
-      - key: METERLESS_MODEL
-        sync: false
+      # --- Sponsor slots: deliberately NOT declared (26 Oct decision) ---
+      # The deployed demo is Render-only. Zetaris is a four-container Docker stack on the
+      # infra PC and Meterless has no cloud edition, so neither can be served from here.
+      # Declaring them would make the blueprint ask for values we have decided not to
+      # supply; leaving them out keeps /sources/status at configured:false - a disclosed
+      # blind a judge can read, instead of an error a judge has to interpret.
+      # Names stay in .env.example for a later re-arm.
+      #
+      # - key: ZETARIS_REST_URL
+      #   sync: false
+      # - key: ZETARIS_ORG_ID
+      #   sync: false
+      # - key: ZETARIS_API_KEY
+      #   sync: false
+      # - key: METERLESS_BASE_URL
+      #   sync: false
+      # - key: METERLESS_API_KEY
+      #   sync: false
+      # - key: METERLESS_MODEL
+      #   sync: false

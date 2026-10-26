@@ -341,14 +341,55 @@ ZETARIS_API_KEY=<the ak token already in .env>
 Verified 26 Oct through the public hostname: `SELECT 1` → `1`, the recipe row
 (`open-meteo:lagos | 14.0 | ugm3 | 17:00Z`), and **no key → `400`** — the URL alone opens nothing.
 
+**After a reboot the tunnel comes back by itself** (task `haqi-zetaris-tunnel`, registered for
+this user at logon +1 min). Docker Desktop starts on its own; the task waits up to 5 minutes for
+`127.0.0.1:8888`, then runs `tunnel.ps1 -Start` and logs to
+`%LOCALAPPDATA%\haqi-demo\autostart.log`:
+
+```powershell
+powershell -NoProfile -File infra\zetaris\install-autostart.ps1          # register (once)
+powershell -NoProfile -File infra\zetaris\install-autostart.ps1 -Status  # armed? last result?
+powershell -NoProfile -File infra\zetaris\install-autostart.ps1 -Remove  # undo
+```
+
+Rehearsed 26 Oct: `-Stop`, then `Start-ScheduledTask haqi-zetaris-tunnel` → new hostname in 13 s,
+`SELECT 1` → `1`, recipe row `17.4 ugm3 @ 18:00Z`, no key → `400`. The task restores *a* tunnel,
+never the *same* URL — Render still needs the new hostname by hand.
+
 Caveats, in order of how likely they are to bite:
 
 - **The hostname changes on every cloudflared restart.** Quick tunnels are anonymous; there is
   no stable name without a Cloudflare account. After a restart, re-run `-Start` and update
   `ZETARIS_REST_URL` in Render + redeploy. Nothing on this PC can update Render by itself — there
   is no Render API key here.
+- **This laptop must stay awake, online and open.** AC standby and hibernate are off, but the
+  Zenbook's firmware exposes no lid-close setting (`LIDACTION` does not exist in the power
+  scheme), so closing the lid sleeps it and the tunnel dies. Leave the lid open and the charger
+  plugged in for the whole judging window.
 - **If cloudflared dies, Render's Zetaris slot fails loudly**, not silently: the adapter raises
   an unreachable error rather than inventing a reading.
+- **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
+  the REST port is the one meant to be called. Still: `/Stop` it after the event.
+- **A `configured: true` slot is not an integration.** On `main` after `fc685f5`, `_sql_for()`
+  queries the recipe view, but `ZetarisAdapter` is still absent from
+  `backend/app/agent.py::_adapters_for` — see `infra/zetaris/README.md` § Adapter wiring. Until
+  that one line lands, the tunnel makes the badge green and changes no verdict.
+- The tunnel process is detached through a VBS `ShellExecute`. `Start-Process` and WMI both fail
+  here: one holds the caller's console handle (piping hangs), the other kills cloudflared.
+
+#### If this PC is down during the demo
+
+The product does not depend on this machine. The deployed API on Render keeps serving `/today`
+from OpenAQ, OpenWeather and NASA FIRMS, which call the internet directly and report
+`configured: true` on their own. What is lost is the **Zetaris slot** and the claim that
+**Meterless is running during the event** — both are eligibility claims, not app functionality.
+
+Say it plainly rather than hiding it: the Zetaris SQL layer lives on the infra host and its
+quick-tunnel URL died with the host. Do not present a `configured: true` badge as a working
+integration; a slot that errors is a disclosed blind, a green badge over nothing is a false claim.
+Recovery order: reopen the laptop, confirm Docker is up, run `tunnel.ps1 -Start`, relay the new
+hostname, redeploy Render. Budget two minutes, and only if the person who owns the Render
+dashboard is reachable.
 - **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
   the REST port is the one meant to be called. Still: `/Stop` it after the event.
 - **A `configured: true` slot is not an integration.** On `main` after `fc685f5`, `_sql_for()`

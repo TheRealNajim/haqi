@@ -8,6 +8,7 @@ from app.adapters.fire import FireAdapter
 from app.adapters.openaq import OpenAQAdapter
 from app.adapters.pollen import PollenAdapter
 from app.adapters.weather import WeatherAdapter
+from app.adapters.zetaris import ZetarisAdapter
 from app.profiles import Profile, get as get_profile
 from app.schemas import SourceType, Verdict, VerdictLevel
 from app.trust import apply_weights, consensus
@@ -19,11 +20,17 @@ _ACTIVE = {"sports", "run", "cycle", "play", "walk"}
 
 
 def _adapters_for(profile: Profile) -> list[BaseAdapter]:
-    """Pollen only matters for the pollen profile; Europe-only source (CAMS)."""
+    """Pollen only matters for the pollen profile; Europe-only source (CAMS).
+    Zetaris joins when its envs exist (tunnel/local) — never guessed into the
+    pipeline; a down tunnel must not stall the verdict, so its REST timeout is
+    short (see tools_zetaris.run_sql)."""
     adapters: list[BaseAdapter] = [OpenAQAdapter(), WeatherAdapter(), FireAdapter()]
     if profile.name == "pollen_allergy":
         adapters.append(PollenAdapter())
     adapters.append(AdvisoryAdapter())
+    from app.adapters.zetaris import configured as zetaris_configured
+    if zetaris_configured():
+        adapters.append(ZetarisAdapter())
     return adapters
 
 

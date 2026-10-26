@@ -84,3 +84,20 @@ def test_timeout_surface(monkeypatch):
     ad = ZetarisAdapter()
     with pytest.raises(AdapterError):
         asyncio.run(ad.gather(6.5244, 3.3792))
+
+
+def test_adapter_joins_loop_only_when_configured(monkeypatch):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from app.adapters.zetaris import ZetarisAdapter
+    import app.agent as A
+    from app.profiles import get
+    prof = get("asthma")
+    monkeypatch.setenv("ZETARIS_REST_URL", "http://localhost:8888/api/v1.0")
+    monkeypatch.setenv("ZETARIS_API_KEY", "k")
+    names_on = [type(a).__name__ for a in A._adapters_for(prof)]
+    assert "ZetarisAdapter" in names_on
+    monkeypatch.delenv("ZETARIS_REST_URL")
+    names_off = [type(a).__name__ for a in A._adapters_for(prof)]
+    assert "ZetarisAdapter" not in names_off

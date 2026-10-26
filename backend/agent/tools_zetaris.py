@@ -17,7 +17,10 @@ async def run_sql(sql: str, limit: int = 100) -> list[list]:
         "X-Request-ID": str(uuid.uuid4()),  # fresh UUID per request, per guide
     }
     body = {"queryId": str(uuid.uuid4()), "sql": sql, "source": "SqlEditor", "limit": limit}
-    async with httpx.AsyncClient(timeout=60) as client:
+    # agent-loop safety: a stalled tunnel must not hang /ask, so the default
+    # timeout is short; drive it up only for one-off deep queries
+    timeout = float(os.getenv("ZETARIS_TIMEOUT", "10"))
+    async with httpx.AsyncClient(timeout=timeout) as client:
         r = await client.post(url, headers=headers, json=body)
     if r.status_code >= 400:
         raise ZetarisError(f"{r.status_code}: {r.text[:200]}")

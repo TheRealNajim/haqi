@@ -723,7 +723,35 @@ docker compose up -d
 | `/today` `blind_spots` says `zetaris unreachable` | the slot is set but the host behind it is dead. Either bring the tunnel back on the infra PC, or — for the Render-only demo — delete `ZETARIS_REST_URL`, `ZETARIS_ORG_ID` and `ZETARIS_API_KEY` in Render and redeploy, so the slot reads `configured: false` instead of failing |
 | `/sources/status` says Zetaris `configured: true` but the host does not resolve | current state, 26 Oct: the dashboard holds a hostname that no longer exists, so `/today` carries `zetaris unreachable: [Errno -2] Name or service not known` in `blind_spots`. Unset the `ZETARIS_*` rows and redeploy; do not chase a URL that is gone |
 
-## 9. Status
+## 9. Demo-day check (browser only, no infra machine)
+
+Everything the demo needs is public; this list runs from any phone in under five minutes, in
+order, top to bottom. It proves the deployment, not the plan.
+
+1. **Warm up first.** Open `https://haqi-api.onrender.com/health` a few minutes early. Render's
+   free tier spins the service down when idle and a cold start can cost ~30–60 s; measured warm,
+   an `/ask` round trip is ~10 s. Do not let the first cold start happen on camera.
+2. **`GET /sources/status` — the disclosure view.** Expect OpenAQ, Weather and Fire
+   `configured: true`; Zetaris and Meterless `configured: false`. If Zetaris says `true`, somebody
+   pasted a host back into the dashboard — that is the incident to resolve *before* presenting
+   (§4), because you cannot see from this badge alone whether that host is real.
+3. **`GET /today` — the product.** Expect a verdict backed by `openaq:` / `waqi:` /
+   `openweather:` / `firms:` evidence, `fallback: false`, and **no `zetaris` entry in
+   `blind_spots`**.
+4. **`POST /ask` — the full loop with a question**, which the buttons don't prove:
+   `{"question":"can my son ride his bike at 5pm today?","lat":6.5244,"lon":3.3792}`. A horizon
+   question is a good ask: the model must parse the time and the 3 h guard must honestly shrink
+   the evidence rather than invent a forecast. Then open `/why/<ledger_id>` from the reply and
+   confirm the receipt renders (nodes, edges, blind_spots).
+5. **Say the disclosure once, out loud:** the product runs fully in the cloud; two integrations we
+   built — the Zetaris SQL layer and the local-only Meterless runtime — are deliberately
+   unconfigured, and `/sources/status` is the honest view of that.
+
+If anything fails, the fastest un-fixable-from-here failure is someone else's env edit: an armed
+Zetaris against a dead host is resolved by deleting `ZETARIS_*` in Render → Environment and
+redeploying, and every other check stays green on its own.
+
+## 10. Status
 
 | Date | What | Result |
 |---|---|---|
@@ -772,3 +800,4 @@ docker compose up -d
 | 26 Oct | **Decision: the demo is Render-only.** `/today` served by OpenAQ + OpenWeather + FIRMS; Zetaris and Meterless unset in Render and disclosed as blinds; no PC on the request path | done |
 | 26 Oct | Zetaris tunnel stopped (`-Stop`), `haqi-zetaris-tunnel` scheduled task removed, AC lid-close restored to sleep; old hostname now `530`, Zetaris still healthy on loopback | done |
 | 26 Oct | Post-shutdown gate: `healthcheck.ps1` 14/14 PASS (docker, REST `SELECT 1`, recipe `20.7 ugm3 @ 0.0 h`, Nemotron reply), recipe checker PASS over loopback | PASS |
+| 26 Oct | Cloud-only rehearsal, no PC involved: `POST /ask` "bike at 5pm" → Nemotron parse OK (~10 s warm), verdict `be careful` with `window: at 5pm` (3 h horizon honored, openweather honestly absent), `/why/ledger-9fff8acf` renders with nodes and edges | PASS — one open item: the dead `ZETARIS_REST_URL` row still prints `unreachable` into `blind_spots` |

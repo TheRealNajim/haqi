@@ -313,10 +313,49 @@ Keys go in **Render → haqi-api → Environment**, never chat and never a commi
 
 - `backend/.env.example` and `render.yaml` list the names; `sync: false` makes Render ask for
   each value when the blueprint applies.
-- Render cannot reach this PC. `ZETARIS_REST_URL=http://localhost:8888/api/v1.0` is dead from
-  Render until there is a tunnel (Tailscale/Cloudflare) or Zetaris lives somewhere reachable.
-  Do not paste it into the dashboard and call the slot armed.
+- Render cannot reach this PC. The loopback value `ZETARIS_REST_URL=http://localhost:8888/api/v1.0`
+  is dead from Render — use the tunnel below, and never paste the loopback URL into the dashboard
+  and call the slot armed.
 - Free-tier disk is ephemeral: `HAQI_DATA_DIR` (the trust ledger) does not survive a redeploy.
+
+#### Exposing Zetaris to Render (quick tunnel)
+
+The deployed API is the product, so the Zetaris slot there needs a public URL. `cloudflared`
+puts one in front of the loopback REST port:
+
+```powershell
+powershell -NoProfile -File infra\zetaris\tunnel.ps1          # status + the rows to paste
+powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Start   # start (downloads cloudflared once)
+powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Stop
+```
+
+`-Start` prints the three rows and proves the tunnel with a real `SELECT 1` through the public
+hostname. Paste into Render → Environment, then redeploy:
+
+```
+ZETARIS_REST_URL=https://<random>.trycloudflare.com/api/v1.0
+ZETARIS_ORG_ID=1
+ZETARIS_API_KEY=<the ak token already in .env>
+```
+
+Verified 26 Oct through the public hostname: `SELECT 1` → `1`, the recipe row
+(`open-meteo:lagos | 14.0 | ugm3 | 17:00Z`), and **no key → `400`** — the URL alone opens nothing.
+
+Caveats, in order of how likely they are to bite:
+
+- **The hostname changes on every cloudflared restart.** Quick tunnels are anonymous; there is
+  no stable name without a Cloudflare account. After a restart, re-run `-Start` and update
+  `ZETARIS_REST_URL` in Render + redeploy. Nothing on this PC can update Render by itself — there
+  is no Render API key here.
+- **If cloudflared dies, Render's Zetaris slot fails loudly**, not silently: the adapter raises
+  an unreachable error rather than inventing a reading.
+- **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
+  the REST port is the one meant to be called. Still: `/Stop` it after the event.
+- **A `configured: true` slot is not an integration.** `ZetarisAdapter` is still absent from
+  `backend/app/agent.py::_adapters_for` and `_sql_for()` still raises — see `infra/zetaris/README.md`
+  § Adapter wiring. Until that lands, the tunnel makes the badge green and changes no verdict.
+- The tunnel process is detached through a VBS `ShellExecute`. `Start-Process` and WMI both fail
+  here: one holds the caller's console handle (piping hangs), the other kills cloudflared.
 
 ## 5. Ports (infra documents reality)
 
@@ -440,7 +479,9 @@ blind no matter what key is pasted into Render. There are two topologies:
 | Network exposure | none (loopback only) | public |
 
 With the source keys in `.env` and the adapter wired, running here is the only topology where
-every slot is genuine. One command:
+every slot is genuine. **Decision taken 26 Oct: the demo runs on the deployed API, with Zetaris
+reached through the quick tunnel (§4).** This local runner stays documented as the fallback for
+the case where the tunnel or Render is down — it needs no network path at all. One command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1          # preflight, then start

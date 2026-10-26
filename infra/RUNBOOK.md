@@ -247,8 +247,33 @@ Create a key at build.nvidia.com, then set all three rows together:
 ```
 MODEL_BASE_URL=https://integrate.api.nvidia.com/v1
 MODEL_API_KEY=<build.nvidia.com key>
-NEMOTRON_MODEL=nvidia/nemotron-3-super-120b-a12b
+NEMOTRON_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b
 ```
+
+Verified live 26 Oct with our key: 85 ids in `GET /v1/models`, this id present, and a chat
+completion answered in ~1.6 s. `nvidia/nemotron-3.5-bolt-e4b` and
+`nvidia/nemotron-3-super-120b-a12b` are both still listed in the catalogue, so the id is a
+choice, not a constraint — pick one and use it everywhere (local `.env`, Render, docs).
+
+Verify without the app:
+
+```bash
+curl -s -H "Authorization: Bearer $KEY" https://integrate.api.nvidia.com/v1/models | jq -r '.data[].id' | grep nemotron
+curl -s https://integrate.api.nvidia.com/v1/chat/completions \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"nvidia/nemotron-3.5-lightning-30b-a3b","messages":[{"role":"user","content":"Reply with the single word: ready"}],"max_tokens":400}'
+```
+
+**Thinking is on by default and eats the token budget.** The same prompt costs 155 completion
+tokens by default (reasoning lands in `message.reasoning_content`) and 2 with
+`chat_template_kwargs: {"enable_thinking": false}`. A small `max_tokens` therefore returns
+`finish_reason: stop` with **empty `content`** — that is not a broken route. The product's
+`chat()` sends no `max_tokens`, so it works, but the parse step pays for reasoning it does not
+need; `enable_thinking: false` is worth setting in the backend for latency.
+
+Meterless is a separate route with a separate token (`%LOCALAPPDATA%\ai.meterless.runtime\proxy-token`).
+Once `MODEL_API_KEY` holds the NVIDIA key, the Meterless `/v1/models` call answers `401` —
+that is expected. Only `/healthz` is needed from Meterless for eligibility.
 
 ## 4. Repo `.env` (never committed)
 
@@ -333,7 +358,8 @@ It is read-only and exits non-zero if anything required is down. It checks: Dock
 the four Zetaris services and their health, the two one-shot jobs (`init`, `bootstrap` must
 be `exited 0`, not running), UI `/api/config`, a real `SELECT 1` through REST with the API
 key from `.env`, the published recipe (`haqi_views.air_quality_readings`) returning a fresh
-contract row, and the Meterless hotspot plus `/v1/models`. Secrets are read from `.env`
+contract row, the Meterless hotspot (`/healthz`, eligibility), and the configured model
+route end to end — catalogue, id present, and a real completion. Secrets are read from `.env`
 and never printed. Sample output on a good day:
 
 ```
@@ -342,17 +368,19 @@ and never printed. Sample output on a good day:
   PASS  init: completed (exit 0)     PASS  bootstrap: completed (exit 0)
   PASS  ui: /api/config 200
   PASS  zetaris rest: SELECT 1 -> 1
-  PASS  recipe: haqi_views.air_quality_readings -> 15.0 ugm3, 0.6 h old
+  PASS  recipe: haqi_views.air_quality_readings -> 13.4 ugm3, 0.2 h old
   PASS  meterless: /healthz http://127.0.0.1:8088
-  PASS  meterless: /v1/models 73 ids
-  WARN  model route: meterless/auto has no provider - product answers fall back to the deterministic path
+  PASS  model route: integrate.api.nvidia.com / nvidia/nemotron-3.5-lightning-30b-a3b
+  PASS  model route: id present in catalogue (85 ids)
+  PASS  model route: nvidia/nemotron-3.5-lightning-30b-a3b replied (ready)
 
-Infra is up, 1 warning(s). Read them before the demo.
+All required checks passed. Demo-ready.
 ```
 
-A `WARN` on the model route is the honest state on 25 Oct: the hotspot is up but nothing serves
-it, so `/v1/models` passes while a completion returns `400`. Pass means infra; the provider is
-a separate credential (`§3`).
+The route block also catches the failure this whole document keeps repeating: a Meterless id
+sent to NVIDIA, or an `nvidia/*` id sent to localhost, is reported as `routes mixed` before
+anything queries it. A `400` on the completion still shows as `WARN` (endpoint up, no provider)
+because that is the Meterless-without-a-key state, not a crash.
 
 Autostart after a reboot (verified 25 Oct):
 

@@ -123,32 +123,32 @@ through a tunnel) to see it.
 
 ## Adapter wiring (backend change, not infra)
 
-Publishing the table name is not enough. **State on `main` after `fc685f5` (26 Oct):** one of the
-two edits has landed, one has not.
+Publishing the table name is not enough. **Both halves are now on `main`** (`fc685f5` added the
+recipe query, `2f2ec83` added the adapter to the agent):
 
 1. **Done.** `ZetarisAdapter._sql_for()` queries `haqi_views.air_quality_readings` in contract
    order. Given rows, the mapper produces evidence.
-2. **Still missing.** `ZetarisAdapter` is not in the agent's adapter list
-   (`app/agent.py`, `_adapters_for`), so it is never gathered and `/today` never calls it.
+2. **Done.** `_adapters_for()` appends `ZetarisAdapter()` only when `configured()` is true
+   (`ZETARIS_REST_URL` and `ZETARIS_API_KEY` both set). With either unset the adapter is never
+   built, nothing is gathered, `/today` carries no `zetaris:` row and `/sources/status` reports
+   `configured: false`.
 
-The remaining change, against the contract this recipe already satisfies:
+That gate is why an unset slot is the safe state and a set-but-dead one is not: with the env
+present, `gather()` runs, `run_sql()` fails against an unreachable host, and the `AdapterError`
+lands in the verdict's `blind` list — an error message on stage instead of a clean blind.
 
 ```python
-# app/agent.py
+# app/agent.py — as merged in 2f2ec83
 def _adapters_for(profile: Profile) -> list[BaseAdapter]:
     adapters: list[BaseAdapter] = [OpenAQAdapter(), WeatherAdapter(), FireAdapter()]
     if profile.name == "pollen_allergy":
         adapters.append(PollenAdapter())
     adapters.append(AdvisoryAdapter())
-    from app.adapters.zetaris import ZetarisAdapter, configured as zetaris_configured
-    if zetaris_configured():          # same shape as the other config-gated sources
+    from app.adapters.zetaris import configured as zetaris_configured
+    if zetaris_configured():
         adapters.append(ZetarisAdapter())
     return adapters
 ```
-
-Check `configured()`'s real name/signature in `app/adapters/zetaris.py` before pasting — the
-adapter already gates on `ZETARIS_REST_URL` / `ZETARIS_API_KEY` presence inside `gather()`, so a
-plain `ZetarisAdapter()` appended unconditionally also works and fails loudly when unset.
 
 `_sql_for()` keeps `distance_km` as `NULL` and `observed_at` as an ISO string with `Z`;
 `_to_evidence` already parses both. The view holds one Lagos point, so this is honest evidence

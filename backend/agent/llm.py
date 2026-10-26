@@ -32,6 +32,82 @@ def _model_name() -> str:
     return os.getenv("NEMOTRON_MODEL", "")
 
 
+_meterless_client = None
+
+
+def _get_meterless_client():
+    """The Meterless Nightshift lane (sponsor Build/Power layer). Nightshift
+    serves one OpenAI-compatible base URL + key from the machine it runs on.
+    Separate from the MODEL_* parse lane: right model, right lane. Missing
+    env = lane disabled, callers keep the deterministic path."""
+    global _meterless_client
+    if _meterless_client is None:
+        base, key, model = (
+            os.getenv("METERLESS_BASE_URL"),
+            os.getenv("METERLESS_API_KEY"),
+            os.getenv("METERLESS_MODEL"),
+        )
+        if base and key and model:
+            from openai import OpenAI
+
+            _meterless_client = OpenAI(base_url=base, api_key=key)
+    return _meterless_client
+
+
+def meterless_model_name() -> str:
+    return os.getenv("METERLESS_MODEL", "")
+
+
+def meterless_available() -> bool:
+    return _get_meterless_client() is not None
+
+
+def narrate_why(ledger: dict) -> str | None:
+    """WHY narration lane (Meterless). One honest paragraph for a 14-year-old,
+    strictly from the logged evidence chain — the ledger is the only source of
+    truth, the model may add zero facts. Any failure returns None; /why keeps
+    serving the deterministic graph without the story field."""
+    rows = []
+    for node in ledger.get("nodes", []):
+        if node.get("id") == "verdict":
+            continue
+        flag = " (STALE — counts less)" if node.get("stale") else ""
+        rows.append(
+            f"- {node['id']}: {node.get('finding')} "
+            f"[weight {node.get('weight')}]{flag}"
+        )
+    if not rows:
+        return None
+    decision = ledger.get("decision", {})
+    blind = "; ".join(ledger.get("blind_spots", [])) or "none logged"
+    try:
+        client = _get_meterless_client()
+        if client is None:
+            return None
+        reply = client.chat.completions.create(
+            model=meterless_model_name(),
+            messages=[
+                {"role": "system", "content": (
+                    "You explain a data verdict to a smart 14-year-old. Use ONLY "
+                    "the evidence listed. 3 to 5 short sentences, plain English, "
+                    "no new numbers, no advice beyond resting on stale or missing "
+                    "data. Never say 'as an AI'. If a reading was stale or a "
+                    "source was blind, say so."
+                )},
+                {"role": "user", "content": (
+                    f"Question: {ledger.get('question', 'now')}\n"
+                    f"Decision: {decision.get('level')} — {decision.get('reason')}\n"
+                    f"Blind spots: {blind}\n"
+                    "Evidence:\n" + "\n".join(rows)
+                )},
+            ],
+            timeout=15,
+        )
+        return (reply.choices[0].message.content or "").strip() or None
+    except Exception:
+        return None
+
+
 def chat(system: str, user: str, tools: list | None = None) -> str:
     client = _get_client()
     if client is None:

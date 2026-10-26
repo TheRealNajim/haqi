@@ -27,6 +27,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from agent.llm import meterless_available, meterless_model_name, narrate_why
 from app.agent import investigate
 from app.adapters.advisory import AdvisoryAdapter
 from app.adapters.base import BaseAdapter
@@ -130,6 +131,13 @@ async def why(ledger_id: str) -> dict:
             )
             return sentinel
         raise HTTPException(404, "no such ledger entry")
+    # Meterless narration lane (CONTRACTS v1.5, optional field): armed only
+    # when METERLESS_* exists; never blocks the deterministic graph.
+    if meterless_available():
+        story = narrate_why(rendered)
+        if story:
+            rendered["story"] = story
+            rendered["story_by"] = f"meterless-nightshift:{meterless_model_name()}"
     return rendered
 
 
@@ -170,6 +178,17 @@ def _sources_summary() -> list[dict]:
         "role": ZETARIS_ROLE,
         "env_required": ["ZETARIS_REST_URL", "ZETARIS_API_KEY"],
         "configured": zetaris_configured(),
+    })
+    # Meterless Nightshift lane: narration (why story), not a data source.
+    # Listed here so the status page tells the truth about the power layer.
+    from agent.llm import meterless_available as _ml
+    out.append({
+        "adapter": "MeterlessNarration",
+        "type": "power layer",
+        "role": "why-story narration via Meterless Nightshift (Nemotron)",
+        "env_required": ["METERLESS_BASE_URL", "METERLESS_API_KEY",
+                         "METERLESS_MODEL"],
+        "configured": _ml(),
     })
     return out
 

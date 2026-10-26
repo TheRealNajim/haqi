@@ -370,10 +370,9 @@ Caveats, in order of how likely they are to bite:
   an unreachable error rather than inventing a reading.
 - **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
   the REST port is the one meant to be called. Still: `/Stop` it after the event.
-- **A `configured: true` slot is not an integration.** On `main` after `fc685f5`, `_sql_for()`
-  queries the recipe view, but `ZetarisAdapter` is still absent from
-  `backend/app/agent.py::_adapters_for` — see `infra/zetaris/README.md` § Adapter wiring. Until
-  that one line lands, the tunnel makes the badge green and changes no verdict.
+- **A `configured: true` slot is not the same as data.** `2f2ec83` put `ZetarisAdapter` in
+  `_adapters_for`, so the deployed agent now gathers it when configured. The proof is a
+  `zetaris:open-meteo:lagos` evidence row in `/today`, not the badge.
 - The tunnel process is detached through a VBS `ShellExecute`. `Start-Process` and WMI both fail
   here: one holds the caller's console handle (piping hangs), the other kills cloudflared.
 
@@ -390,14 +389,38 @@ integration; a slot that errors is a disclosed blind, a green badge over nothing
 Recovery order: reopen the laptop, confirm Docker is up, run `tunnel.ps1 -Start`, relay the new
 hostname, redeploy Render. Budget two minutes, and only if the person who owns the Render
 dashboard is reachable.
-- **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
-  the REST port is the one meant to be called. Still: `/Stop` it after the event.
-- **A `configured: true` slot is not an integration.** On `main` after `fc685f5`, `_sql_for()`
-  queries the recipe view, but `ZetarisAdapter` is still absent from
-  `backend/app/agent.py::_adapters_for` — see `infra/zetaris/README.md` § Adapter wiring. Until
-  that one line lands, the tunnel makes the badge green and changes no verdict.
-- The tunnel process is detached through a VBS `ShellExecute`. `Start-Process` and WMI both fail
-  here: one holds the caller's console handle (piping hangs), the other kills cloudflared.
+
+#### The Meterless narration lane is not armed (26 Oct)
+
+`/why` can carry a `story_by` paragraph written by Nightshift (`agent/llm.py:narrate_why`). It is
+the only place the Meterless sponsor appears in the product, and it is **off for an honest
+reason**, not for lack of wiring.
+
+- It arms only when `METERLESS_BASE_URL`, `METERLESS_API_KEY` and `METERLESS_MODEL` all exist.
+  Miss one and the lane is skipped; `/why` keeps its deterministic graph.
+- Nightshift itself is up: `node host.mjs` listens on `127.0.0.1:8088`, `/healthz` returns 200,
+  `/v1/models` returns **401 without the proxy token** and 73 model ids with it.
+- Every completion returns `503 local_runtime_not_ready`: the local runtime lane on `127.0.0.1:11435`
+  reports `health=offline`, and `models_dir` holds only `.part` stubs (~4 MB each), so there are no
+  weights to load.
+- The tunnel half is proven working: `tunnel.ps1 -Start -Port 8088 -StatePrefix meterless` gave a
+  public hostname answering `/healthz` 200, `/v1/models` 401 without the key, 73 ids with it.
+  It was stopped again — pointing Render at a lane that answers 503 would advertise a broken
+  feature, and a narration lane that always fails adds nothing to `/why`.
+
+To arm it, in this order:
+
+```powershell
+# 1. Meterless -> Setup -> Runtime -> download/repair a model, then prove one completion:
+#    POST 127.0.0.1:8088/v1/chat/completions  {model: "local-runtime/<id>", ...}
+# 2. Only once that returns 200:
+powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Start -Port 8088 -StatePrefix meterless
+# 3. Paste the three rows it prints into Render, then redeploy.
+```
+
+Hardware reality check: this laptop reports 15.6 GB RAM with ~2.7 GB free and ~7 GB of swap at
+measurement. A `local-runtime/*` 30B id will not fit; the smallest instruct model is the only
+candidate. Do not fill the three env vars with guesses to make a badge green.
 
 ## 5. Ports (infra documents reality)
 

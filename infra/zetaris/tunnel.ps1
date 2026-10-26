@@ -1,26 +1,33 @@
-﻿# tunnel.ps1 - give the deployed API a way to reach Zetaris on this PC.
+﻿# tunnel.ps1 - give the deployed API a way to reach a service on this PC.
 #
-# Render cannot see 127.0.0.1:8888. A Cloudflare quick tunnel puts an https URL in front of
-# it; the deployed backend then uses that URL as ZETARIS_REST_URL. Zetaris still requires the
-# `ak` bearer key, so the URL alone does not open the data (verified: no key -> 400).
+# Render cannot see 127.0.0.1. A Cloudflare quick tunnel puts an https URL in front of a local
+# port; the deployed backend then uses that URL instead of localhost. The service keeps its own
+# auth, so the URL alone does not open anything (Zetaris: no key -> 400).
+#
+# Default target is Zetaris REST on 8888, which is the slot the deployed API consumes. The same
+# script fronts a second port when asked, with its own state files so neither tunnel can stop
+# the other:
+#
+#   powershell -NoProfile -File infra\zetaris\tunnel.ps1            # status + the Render rows
+#   powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Start     # start (downloads cloudflared once)
+#   powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Stop
+#
+#   # Meterless Nightshift narration lane (optional, port 8088):
+#   powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Start -Port 8088 -StatePrefix meterless
 #
 # A quick tunnel is anonymous and its hostname changes every time cloudflared restarts. If it
-# restarts, re-run -Start, then update ZETARIS_REST_URL in Render and redeploy. Nothing on
+# restarts, re-run -Start, then update the matching env var in Render and redeploy. Nothing on
 # this PC can update Render without an API key.
 #
 # Start detaches through a VBS ShellExecute. Start-Process and Win32_Process.Create children
 # keep a console handle, so piping this script's output waits forever for cloudflared; WMI
 # also kills it outright (the log ends in ^C). The VBS route survives both.
-#
-# Usage:
-#   powershell -NoProfile -File infra\zetaris\tunnel.ps1            # status + the Render rows
-#   powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Start     # start (downloads cloudflared once)
-#   powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Stop
 
 param(
     [switch]$Start,
     [switch]$Stop,
-    [int]$Port = 8888
+    [int]$Port = 8888,
+    [string]$StatePrefix = 'tunnel'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -30,10 +37,14 @@ $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $envFile = Join-Path $root '.env'
 $runDir = Join-Path $env:LOCALAPPDATA 'haqi-demo'
 $exe = Join-Path $runDir 'cloudflared.exe'
-$logOut = Join-Path $runDir 'tunnel.out'
-$logErr = Join-Path $runDir 'tunnel.log'
-$urlFile = Join-Path $runDir 'tunnel.url'
-$pidFile = Join-Path $runDir 'tunnel.pid'
+$logOut = Join-Path $runDir ($StatePrefix + '.out')
+$logErr = Join-Path $runDir ($StatePrefix + '.log')
+$urlFile = Join-Path $runDir ($StatePrefix + '.url')
+$pidFile = Join-Path $runDir ($StatePrefix + '.pid')
+
+# 8888 is the Zetaris REST port; everything else is a generic local service.
+$isZetaris = ($Port -eq 8888)
+$label = if ($isZetaris) { 'zetaris' } else { 'port ' + $Port }
 
 function Ok   ([string]$m) { Write-Host ("  PASS  " + $m) }
 function Bad  ([string]$m) { Write-Host ("  FAIL  " + $m) }
@@ -55,8 +66,11 @@ function Get-TunnelPid {
         $p = (Get-Content $pidFile -Raw).Trim()
         if ($p -and (Get-Process -Id ([int]$p) -ErrorAction SilentlyContinue)) { return [int]$p }
     }
-    $proc = Get-Process cloudflared -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($proc) { return $proc.Id }
+    # No state file (or a stale one): match the process to THIS port, never to any cloudflared.
+    $proc = Get-CimInstance Win32_Process -Filter "Name='cloudflared.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -and $_.CommandLine -match ('127\.0\.0\.1:' + $Port + '(\s|$)') } |
+            Select-Object -First 1
+    if ($proc) { return [int]$proc.ProcessId }
     return $null
 }
 
@@ -75,13 +89,49 @@ function Show-RenderRows([string]$url) {
     Write-Host ""
     Write-Host "Paste these into Render -> haqi-api -> Environment, then redeploy:"
     Write-Host ""
-    Write-Host ("  ZETARIS_REST_URL = " + $url + "/api/v1.0")
-    Write-Host  "  ZETARIS_ORG_ID   = 1"
-    Write-Host  "  ZETARIS_API_KEY  = <the ak token already in .env>"
+    if ($isZetaris) {
+        Write-Host ("  ZETARIS_REST_URL = " + $url + "/api/v1.0")
+        Write-Host  "  ZETARIS_ORG_ID   = 1"
+        Write-Host  "  ZETARIS_API_KEY  = <the ak token already in .env>"
+    } elseif ($Port -eq 8088) {
+        Write-Host ("  METERLESS_BASE_URL = " + $url + "/v1")
+        Write-Host  "  METERLESS_API_KEY  = <Nightshift proxy token, DM only>"
+        Write-Host  "  METERLESS_MODEL    = <a local-runtime/* id from GET /v1/models>"
+        Write-Host ""
+        Write-Host  "Only worth pasting once a completion actually answers: with no weights the"
+        Write-Host  "lane returns 503 local_runtime_not_ready. See .env.example."
+    } else {
+        Write-Host ("  <SERVICE>_BASE_URL = " + $url)
+    }
     Write-Host ""
 }
 
 function Test-Public([string]$url) {
+    if (-not $isZetaris) {
+        # Keyless liveness only: the service's own auth is a separate question.
+        for ($i = 1; $i -le 24; $i++) {
+            try {
+                $r = Invoke-WebRequest ($url + "/healthz") -UseBasicParsing -TimeoutSec 15
+                if ($r.StatusCode -eq 200) { Ok ("public URL answers /healthz on " + $label) }
+                else { Bad ("public URL returned " + $r.StatusCode + " from /healthz") }
+                return
+            } catch {
+                $code = $_.Exception.Response.StatusCode.value__
+                if ($code -and $code -lt 500) {
+                    # Reached the service; /healthz just is not shaped the way we assumed.
+                    Ok ("public URL reaches " + $label + " (" + $code + " from /healthz)")
+                    return
+                }
+                if ($i -eq 24) {
+                    Bad ("public URL not reachable after 24 tries" + $(if ($code) { " (" + $code + ")" } else { "" }))
+                    return
+                }
+                Start-Sleep -Seconds 5
+            }
+        }
+        return
+    }
+
     $cfg = Read-DotEnv $envFile
     $key = $cfg['ZETARIS_API_KEY']
     if (-not $key) { Warn "no ZETARIS_API_KEY in .env - cannot prove the tunnel end to end"; return }
@@ -106,7 +156,7 @@ function Test-Public([string]$url) {
                 Bad ("public URL rejected the request (" + $code + ") - check ZETARIS_API_KEY and X-Org-ID")
                 return
             }
-            if ($i -eq 8) {
+            if ($i -eq 24) {
                 Bad ("public URL not reachable after 24 tries" + $(if ($code) { " (" + $code + ")" } else { "" }))
                 return
             }
@@ -117,23 +167,17 @@ function Test-Public([string]$url) {
 
 # --- stop ----------------------------------------------------------------------------------
 if ($Stop) {
-    Write-Host "haqi zetaris tunnel - stop"
-    Write-Host "=========================="
+    Write-Host ("haqi tunnel - stop (" + $label + ")")
+    Write-Host "========================================"
     Write-Host ""
-    $stopped = 0
     $tunnelPid = Get-TunnelPid
     if ($tunnelPid) {
         taskkill /T /F /PID $tunnelPid 2>&1 | Out-Null
-        $stopped++
-    }
-    foreach ($p in @(Get-Process cloudflared -ErrorAction SilentlyContinue)) {
-        taskkill /T /F /PID $p.Id 2>&1 | Out-Null
-        $stopped++
-    }
-    if ($stopped -gt 0) { Ok ("stopped tunnel (" + $stopped + " process(es))") } else { Info "no tunnel was running" }
+        Ok ("stopped cloudflared pid " + $tunnelPid)
+    } else { Info ("no tunnel is running for " + $label) }
     Remove-Item $urlFile, $pidFile -Force -ErrorAction SilentlyContinue
     Write-Host ""
-    Write-Host "The URL is dead. If it was in Render, update or remove it or the Zetaris slot fails."
+    Write-Host "The URL is dead. If it was in Render, update or remove it or the slot fails."
     exit 0
 }
 
@@ -142,11 +186,11 @@ $url = Get-TunnelUrl
 
 # --- status --------------------------------------------------------------------------------
 if (-not $Start) {
-    Write-Host "haqi zetaris tunnel - status"
-    Write-Host "============================"
+    Write-Host ("haqi tunnel - status (" + $label + ")")
+    Write-Host "=========================================="
     Write-Host ""
     if (-not $tunnelPid) {
-        Warn "cloudflared is not running - start with -Start"
+        Warn ("cloudflared is not running for " + $label + " - start with -Start")
         if ($url) { Info ("last URL (dead): " + $url) }
         Write-Host ""
         exit 1
@@ -160,27 +204,28 @@ if (-not $Start) {
 }
 
 # --- start ---------------------------------------------------------------------------------
-Write-Host "haqi zetaris tunnel"
-Write-Host "==================="
+Write-Host ("haqi tunnel - start (" + $label + ")")
+Write-Host "========================================="
 Write-Host ""
 
 if ($tunnelPid) {
     Info "already running - reusing it"
-    if (-not $url) { Warn "no URL found in " + $logErr; exit 1 }
+    if (-not $url) { Warn ("no URL found in " + $logErr); exit 1 }
     Ok ("public URL: " + $url)
     Test-Public $url
     Show-RenderRows $url
     exit 0
 }
 
-# Zetaris must be answering locally before it is worth exposing.
+# The service must be answering locally before it is worth exposing. Any HTTP status proves it
+# is there - a 401 at the root is normal for both Zetaris and Nightshift.
 try {
     Invoke-WebRequest "http://127.0.0.1:$Port/" -UseBasicParsing -TimeoutSec 5 | Out-Null
-    Ok "zetaris: answering on 127.0.0.1:$Port"
+    Ok ($label + ": answering on 127.0.0.1:" + $Port)
 } catch {
     $code = $_.Exception.Response.StatusCode.value__
-    if ($code -eq 404) { Ok "zetaris: answering on 127.0.0.1:$Port (404 at root is normal)" }
-    else { Bad "nothing on 127.0.0.1:$Port - is the Zetaris stack up?"; exit 1 }
+    if ($code) { Ok ($label + ": answering on 127.0.0.1:" + $Port + " (HTTP " + $code + " at root)") }
+    else { Bad ("nothing on 127.0.0.1:" + $Port + " - is the service up?"); exit 1 }
 }
 
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
@@ -202,8 +247,8 @@ Remove-Item $logOut, $logErr -Force -ErrorAction SilentlyContinue
 # Launcher + VBS detach. Start-Process (and WMI) children keep a handle on this console, so
 # anything piping the script's output waits for cloudflared to exit - which is never. WScript's
 # ShellExecute starts it outside the console tree, and wscript itself returns immediately.
-$cmdFile = Join-Path $runDir 'tunnel.cmd'
-$vbsFile = Join-Path $runDir 'launch.vbs'
+$cmdFile = Join-Path $runDir ($StatePrefix + '.cmd')
+$vbsFile = Join-Path $runDir ($StatePrefix + '.vbs')
 @(
     '@echo off',
     ('cd /d "' + $runDir + '"'),
@@ -237,5 +282,3 @@ Test-Public $url
 Show-RenderRows $url
 Write-Host "Stop with -Stop. The hostname changes on every restart; re-run -Start and update Render."
 exit 0
-
-

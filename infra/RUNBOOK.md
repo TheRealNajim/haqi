@@ -401,10 +401,13 @@ ZETARIS_API_KEY=<the ak token already in .env>
 Verified 26 Oct through the public hostname: `SELECT 1` → `1`, the recipe row
 (`open-meteo:lagos | 14.0 | ugm3 | 17:00Z`), and **no key → `400`** — the URL alone opens nothing.
 
-**After a reboot the tunnel comes back by itself** (task `haqi-zetaris-tunnel`, registered for
-this user at logon +1 min). Docker Desktop starts on its own; the task waits up to 5 minutes for
-`127.0.0.1:8888`, then runs `tunnel.ps1 -Start` and logs to
-`%LOCALAPPDATA%\haqi-demo\autostart.log`:
+**The autostart task is gone** (26 Oct). `haqi-zetaris-tunnel` was registered to bring the tunnel
+back at logon +1 min, then removed the same day when the tunnel left the demo path — it kept
+reopening a public hostname for a slot nothing consumed. Docker Desktop still starts on its own,
+and Zetaris stays healthy on loopback whether or not a tunnel exists. Current state: no
+`cloudflared` process, no scheduled task, the old hostname answers `530` from Cloudflare.
+
+Re-register it only when the slot is being re-armed:
 
 ```powershell
 powershell -NoProfile -File infra\zetaris\install-autostart.ps1          # register (once)
@@ -412,13 +415,15 @@ powershell -NoProfile -File infra\zetaris\install-autostart.ps1 -Status  # armed
 powershell -NoProfile -File infra\zetaris\install-autostart.ps1 -Remove  # undo
 ```
 
+The task waits up to 5 minutes for `127.0.0.1:8888`, then runs `tunnel.ps1 -Start` and logs to
+`%LOCALAPPDATA%\haqi-demo\autostart.log`.
+
 Rehearsed 26 Oct: `-Stop`, then `Start-ScheduledTask haqi-zetaris-tunnel` → new hostname in 13 s,
 `SELECT 1` → `1`, recipe row `17.4 ugm3 @ 18:00Z`, no key → `400`. The task restores *a* tunnel,
 never the *same* URL — re-arming Render would still need the new hostname by hand.
 
-Under the Render-only decision the task is convenience for local proof, not demo infrastructure.
-It keeps opening a public hostname onto this PC every logon for a slot nothing consumes, so
-`-Remove` when the tunnel is no longer being demonstrated.
+Under the Render-only decision that task is convenience for local proof, not demo infrastructure —
+which is why it is removed rather than merely unused.
 
 Caveats, in order of how likely they are to bite:
 
@@ -434,7 +439,7 @@ Caveats, in order of how likely they are to bite:
   `zetaris unreachable` into the verdict's `blind_spots` rather than inventing a reading. With the
   slot unset (the decision above) that failure mode does not exist.
 - **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
-  the REST port is the one meant to be called. Still: `/Stop` it after the event.
+  the REST port is the one meant to be called. Still: `/Stop` it as soon as the proof is done.
 - **A `configured: true` slot is not the same as data.** `2f2ec83` put `ZetarisAdapter` in
   `_adapters_for`, so the deployed agent now gathers it when configured. The proof is a
   `zetaris:open-meteo:lagos` evidence row in `/today`, not the badge.
@@ -765,3 +770,5 @@ docker compose up -d
 | 26 Oct | Live `/today`: served by OpenAQ + WAQI + OpenWeather + FIRMS, but `blind_spots` carries `zetaris unreachable: [Errno -2] Name or service not known` — dashboard holds a dead hostname while `/sources/status` says `configured: true` | open — needs the Render rows deleted |
 | 26 Oct | Nightshift: `/healthz` 200, `/v1/models` 401 without token / 73 ids with it, completions `503 local_runtime_not_ready` (no weights) | recorded |
 | 26 Oct | **Decision: the demo is Render-only.** `/today` served by OpenAQ + OpenWeather + FIRMS; Zetaris and Meterless unset in Render and disclosed as blinds; no PC on the request path | done |
+| 26 Oct | Zetaris tunnel stopped (`-Stop`), `haqi-zetaris-tunnel` scheduled task removed, AC lid-close restored to sleep; old hostname now `530`, Zetaris still healthy on loopback | done |
+| 26 Oct | Post-shutdown gate: `healthcheck.ps1` 14/14 PASS (docker, REST `SELECT 1`, recipe `20.7 ugm3 @ 0.0 h`, Nemotron reply), recipe checker PASS over loopback | PASS |

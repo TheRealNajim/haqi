@@ -107,7 +107,7 @@ Token internals (25 Oct):
 - Zetaris API tokens have an `ak` prefix and a fixed length of 60 characters (`ak` + 58 hex chars).
 - The REST API hashes the incoming token with SHA-256 and matches it against `lightning_user_api_key.api_key`.
 - An official 5-year key for `haqi` has been generated and verified against the live query engine:
-  `ak05f1531786d310e013a50b5f6f4853357715b0a27ff884776c5a4a1ca4`
+  `ak<redacted 26 Oct - do not reuse; rotate in Management > API Tokens>`
   Round-trip time on `SELECT 1` was 123 ms. Tested on `NY_TAXI.customers`.
 
 ## 3. Meterless and the Nemotron route

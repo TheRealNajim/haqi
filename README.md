@@ -6,7 +6,7 @@ plus the weighted evidence chain behind it, every receipt logged.
 
 Built for [Open Agent Hackathon 2026](https://hackathon.genai.works/event/open-agent-hackathon-2026), Track 02 — **The Agent That Can Explain Why**.
 
-[Live API](https://haqi-api.onrender.com) · [Frontend](https://haqi-one.vercel.app) · [Self-audit route](https://haqi-api.onrender.com/proof) · [Setup](#try-the-backend) · [Rubric map](#how-this-fits-the-judging-rubric)
+[Live API](https://haqi-api.onrender.com) · [Frontend](https://haqi-one.vercel.app) · [Slide deck](https://xarkgg.github.io/haqi-deck/) · [Self-audit route](https://haqi-api.onrender.com/proof) · [Setup](#try-the-backend) · [Rubric map](#how-this-fits-the-judging-rubric)
 
 **Status (judge-facing honest split):**
 

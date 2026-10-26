@@ -114,8 +114,12 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 25_0
 
     if (!response.ok) {
       const failure = body as Partial<ErrorBody> | null;
+      const message =
+        response.status === 502
+          ? "We couldn't get the latest air-quality data. Please check your internet connection and try again."
+          : failure?.error?.trim() || `The service answered ${response.status}.`;
       throw new ApiError(
-        failure?.error?.trim() || `The service answered ${response.status}.`,
+        message,
         response.status,
         failure?.fallback ?? null,
       );

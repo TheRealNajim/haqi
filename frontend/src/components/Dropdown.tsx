@@ -36,7 +36,7 @@ export function Dropdown({
         }}
         aria-disabled={disabled || undefined}
         title={value}
-        className={`flex h-full w-full items-center justify-between gap-2 rounded-[10px] bg-surface ${
+        className={`flex h-full w-full items-center justify-between gap-2 rounded-[10px] border border-border bg-surface shadow-[var(--shadow-soft)] ${
           disabled || small ? "px-3 text-[14px]" : "px-4 text-[16px]"
         } ${disabled ? "cursor-not-allowed text-ink-faint" : "cursor-pointer text-ink"}`}
       >

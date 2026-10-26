@@ -18,6 +18,8 @@ export type TodayReading = {
 
 const CACHE_TTL_MS = 2 * 60_000;
 const cache = new Map<string, { at: number; reading: TodayReading }>();
+/** One in-flight request per coordinate, so two mounted views share a fetch. */
+const inflight = new Map<string, Promise<TodayReading>>();
 
 export function demoReading(): TodayReading {
   const observed = new Date(Date.now() - 20 * 60_000).toISOString();
@@ -87,7 +89,10 @@ export async function loadToday(lat: number, lon: number, force = false): Promis
   const cached = cache.get(key);
   if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.reading;
 
-  try {
+  const pending = force ? undefined : inflight.get(key);
+  if (pending) return pending;
+
+  const request = (async () => {
     const verdict = await fetchToday(lat, lon);
     const reading: TodayReading = {
       verdict,
@@ -96,14 +101,21 @@ export async function loadToday(lat: number, lon: number, force = false): Promis
     };
     cache.set(key, { at: Date.now(), reading });
     return reading;
-  } catch (error) {
-    // The error contract can carry a labelled fallback verdict; show it as
-    // demo data rather than hiding the page behind an error.
-    if (error instanceof ApiError && error.fallback) {
-      return { verdict: error.fallback, fetchedAt: new Date().toISOString(), demo: true };
-    }
-    throw error;
-  }
+  })()
+    .catch((error: unknown) => {
+      // The error contract can carry a labelled fallback verdict; show it as
+      // demo data rather than hiding the page behind an error.
+      if (error instanceof ApiError && error.fallback) {
+        return { verdict: error.fallback, fetchedAt: new Date().toISOString(), demo: true };
+      }
+      throw error;
+    })
+    .finally(() => {
+      inflight.delete(key);
+    });
+
+  inflight.set(key, request);
+  return request;
 }
 
 export function clearTodayCache() {

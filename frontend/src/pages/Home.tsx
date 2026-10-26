@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
-import { Map as MapIcon, MessageCircle, BadgeQuestionMark, X, type LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { BadgeQuestionMark, Map as MapIcon, MessageCircle, X } from "lucide-react";
+import { type LucideIcon } from "lucide-react";
 
-import worldMap from "@/assets/world-map.jpg";
-import { AppHeader, type HeaderFilterKey } from "@/components/AppHeader";
-import { COUNTRIES_BY_REGION, AREAS_BY_COUNTRY } from "@/data/geo";
+import { AppHeader } from "@/components/AppHeader";
+import { WorldMap, type AqiMarker, type MapSelection } from "@/components/map/WorldMap";
+import { AREAS_BY_COUNTRY, COUNTRIES_BY_REGION } from "@/data/geo";
+import { appAreaFor, appCountryFor } from "@/data/world";
 import { usePlace } from "@/hooks/usePlace";
-import { H, K, W, canvasPosition } from "@/lib/canvas";
-import { SCREEN_PATHS, useRoute, type Screen } from "@/lib/router";
-import { AskPage } from "@/pages/Ask";
+import { useTodayReading } from "@/hooks/useTodayReading";
+import { H, K, W } from "@/lib/canvas";
+import { useRoute, type Screen } from "@/lib/router";
 import { TodayPage } from "@/pages/Today";
+import { AskPage } from "@/pages/Ask";
 import { WhyPage } from "@/pages/Why";
 
 const NAV: { icon: LucideIcon; label: string; screen: Screen; filled?: boolean }[] = [
@@ -19,76 +21,23 @@ const NAV: { icon: LucideIcon; label: string; screen: Screen; filled?: boolean }
   { icon: BadgeQuestionMark, label: "Why", screen: "why" },
 ];
 
-const screenLayer = (active: boolean) =>
+/**
+ * Screen layers sit ON TOP of the shared background map, so the layer itself
+ * never takes pointer events — the cards and controls inside opt back in and
+ * everything else falls through to the map underneath.
+ */
+const screenLayer = (active: boolean, immersive: boolean) =>
   `absolute inset-0 transition-[opacity,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
-    active ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-3 opacity-0"
+    active
+      ? `pointer-events-auto translate-y-0 ${immersive ? "opacity-0" : "opacity-100"}`
+      : "pointer-events-none -translate-y-3 opacity-0"
   }`;
 
-function ImmersiveMap({ closing, onClose }: { closing: boolean; onClose: () => void }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    return () => previous?.focus?.();
-  }, []);
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Full air-quality map"
-      className={`fixed inset-0 z-50 flex flex-col bg-canvas ${closing ? "map-exit" : "map-enter"}`}
-    >
-      <img
-        src={worldMap}
-        alt="Relief world map coloured by risk level"
-        className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
-      />
-      <div aria-hidden className="absolute inset-0 bg-canvas/15" />
-
-      <div className="relative flex items-start justify-between gap-4 p-5 sm:p-7">
-        <div className="rounded-[14px] border border-border bg-surface px-5 py-4 shadow-[var(--shadow-soft)]">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-ink-faint">Full map</p>
-          <h2 className="mt-1 text-[20px] leading-tight text-ink">World Risk Map</h2>
-          <p className="mt-1 text-[12px] text-ink-faint">Static relief map · demo preview</p>
-        </div>
-
-        <button
-          ref={closeRef}
-          type="button"
-          onClick={onClose}
-          aria-label="Exit full map"
-          className="flex size-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-ink shadow-[var(--shadow-soft)] transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-        >
-          <X className="size-5" strokeWidth={1.6} />
-        </button>
-      </div>
-
-      <div className="relative mt-auto flex flex-wrap items-end justify-between gap-4 p-5 sm:p-7">
-        <p className="max-w-[340px] text-[12px] leading-[1.55] text-ink-soft">
-          The map is a static relief image in this build. Press Esc or use the close button to
-          return to the screen you came from.
-        </p>
-        <div className="rounded-[14px] border border-border bg-surface px-4 py-3 shadow-[var(--shadow-soft)]">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-ink-faint">Risk level</p>
-          <div className="mt-2 flex gap-4 text-[12px] text-ink-soft">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-risk-green" /> Low
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-risk-yellow" /> Moderate
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-risk-red" /> High
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/**
+ * Where the map background sits, in design units — the exact rect the static
+ * backdrop image used to occupy, so the live relief drops into the same place
+ * in the artwork on all three screens.
+ */
 // The page must paint at its final size: the first render is measured here so
 // the canvas never appears oversized and then shrinks on refresh.
 const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth || 1;
@@ -121,18 +70,12 @@ export function HomePage() {
   const [navHover, setNavHover] = useState<{ label: string; top: number } | null>(null);
   const [query, setQuery] = useState("");
   const [immersive, setImmersive] = useState(false);
-  const [immersiveClosing, setImmersiveClosing] = useState(false);
-  const immersiveTimer = useRef<number | null>(null);
+  const [mapSelection, setMapSelection] = useState<MapSelection | null>(null);
   const { screen, navigate } = useRoute();
+  const { reading } = useTodayReading(placeState.place, screen === "today");
 
-  const closeImmersive = useCallback(() => {
-    setImmersiveClosing(true);
-    immersiveTimer.current = window.setTimeout(() => {
-      setImmersive(false);
-      setImmersiveClosing(false);
-      immersiveTimer.current = null;
-    }, 180);
-  }, []);
+  const closeImmersive = useCallback(() => setImmersive(false), []);
+  const openImmersive = useCallback(() => setImmersive(true), []);
 
   useEffect(() => {
     if (!immersive) return;
@@ -148,20 +91,58 @@ export function HomePage() {
     };
   }, [immersive, closeImmersive]);
 
-  useEffect(() => {
-    return () => {
-      if (immersiveTimer.current) window.clearTimeout(immersiveTimer.current);
-    };
-  }, []);
+  /**
+   * The map and the header filters share one idea of "the place you are looking
+   * at": choosing a country on the map brings the reading with it.
+   */
+  const handleMapSelect = useCallback(
+    (selection: MapSelection | null) => {
+      setMapSelection(selection);
+      if (!selection) return;
 
-  const openImmersive = () => {
-    if (immersiveTimer.current) {
-      window.clearTimeout(immersiveTimer.current);
-      immersiveTimer.current = null;
-    }
-    setImmersiveClosing(false);
-    setImmersive(true);
-  };
+      if (selection.kind === "state") {
+        selectRegion("Africa");
+        selectCountry("Nigeria");
+        selectArea(appAreaFor(selection.name));
+        return;
+      }
+
+      const match = appCountryFor(selection.name);
+      if (match) {
+        selectRegion(match.region);
+        selectCountry(match.country);
+      }
+    },
+    [selectArea, selectCountry, selectRegion],
+  );
+
+  const mapMarkers = useMemo<AqiMarker[]>(() => {
+    const place = placeState.place;
+    if (!reading || !place) return [];
+    const verdict = reading.verdict;
+    const strongest = [...verdict.evidence].sort((a, b) => b.weight - a.weight)[0];
+    const observedAt =
+      verdict.evidence
+        .map((item) => item.observed_at)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1) ?? null;
+
+    return [
+      {
+        id: "current-place",
+        name: place.label,
+        lat: place.lat,
+        lon: place.lon,
+        aqi: verdict.aqi,
+        level: verdict.level,
+        observedAt,
+        source: (strongest ? strongest.source_id.split(":")[0] : null) ?? "HAQI verdict",
+        demo: reading.demo,
+        detail: strongest?.claim ?? verdict.reason,
+      },
+    ];
+  }, [reading, placeState.place]);
 
   useLayoutEffect(() => {
     const update = () => {
@@ -178,7 +159,7 @@ export function HomePage() {
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  const setFilter = (key: HeaderFilterKey, value: string) => {
+  const setFilter = (key: string, value: string) => {
     if (key === "region") {
       selectRegion(value === "Select Region" ? "" : value);
     } else if (key === "country") {
@@ -220,7 +201,7 @@ export function HomePage() {
 
   const activeNav = NAV.findIndex((item) => item.screen === screen);
 
-  const handleNavClick = (event: ReactMouseEvent<HTMLAnchorElement>, next: Screen) => {
+  const handleNavClick = (event: React.MouseEvent<HTMLAnchorElement>, next: Screen) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     setNavHover(null);
@@ -232,7 +213,7 @@ export function HomePage() {
     return (
       <a
         key={item.label}
-        href={SCREEN_PATHS[item.screen]}
+        href={"/"}
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
         onClick={(event) => handleNavClick(event, item.screen)}
@@ -245,10 +226,10 @@ export function HomePage() {
           });
         }}
         onMouseLeave={() => setNavHover(null)}
-        style={desktop ? canvasPosition(true, 29, 127 + index * 69, 64, 64) : undefined}
+        style={desktop ? { left: 29 * K, top: (127 + index * 69) * K, width: 64 * K, height: 64 * K } : undefined}
         className={
           desktop
-            ? "z-20 flex cursor-pointer items-center justify-center rounded-[10px] bg-surface text-ink"
+            ? "absolute z-20 flex cursor-pointer items-center justify-center rounded-[10px] bg-surface text-ink"
             : `flex h-10 flex-1 items-center justify-center gap-2 rounded-[10px] text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 ${
                 active ? "bg-ink text-surface" : "bg-surface text-ink-soft"
               }`
@@ -287,33 +268,30 @@ export function HomePage() {
   ) : null;
 
   return (
-    <div ref={wrapRef} className="min-h-screen w-full bg-canvas">
+    <div ref={wrapRef} className="relative min-h-screen w-full bg-white">
+      <div
+        className={`fixed inset-0 overflow-hidden ${
+          immersive
+            ? "map-launch pointer-events-auto z-50"
+            : "pointer-events-none z-0"
+        }`}
+      >
+        <WorldMap
+          selected={mapSelection}
+          onSelect={handleMapSelect}
+          markers={mapMarkers}
+          immersive={immersive}
+          onImmersiveChange={(next) => (next ? openImmersive() : closeImmersive())}
+        />
+      </div>
       {desktop ? (
-        <div style={{ height: H * scale }} className="overflow-hidden">
+        <div style={{ height: H * scale }} className="relative z-10 overflow-hidden">
           <div
-            className="relative origin-top-left overflow-hidden bg-canvas"
+            className="absolute left-0 top-0 origin-top-left overflow-hidden"
             style={{ width: W, height: H, transform: `scale(${scale})` }}
           >
-            {/* The map is the shared backdrop for every screen; it never remounts. */}
-            <img
-              src={worldMap}
-              alt="Relief world map coloured by risk level"
-              width={1920}
-              height={1280}
-              className="pointer-events-none absolute select-none"
-              style={{
-                left: -120 * K,
-                top: 170 * K,
-                width: 1728 * K,
-                maskImage:
-                  "radial-gradient(ellipse 70% 70% at 50% 50%, black 60%, transparent 100%)",
-                WebkitMaskImage:
-                  "radial-gradient(ellipse 70% 70% at 50% 50%, black 60%, transparent 100%)",
-              }}
-            />
-
             <div
-              className={screenLayer(screen === "today")}
+              className={screenLayer(screen === "today", immersive)}
               aria-hidden={screen !== "today"}
               inert={screen !== "today"}
             >
@@ -323,6 +301,8 @@ export function HomePage() {
                 placeStatus={placeState.status}
                 placeNote={placeState.note}
                 region={region}
+                country={country}
+                area={area}
                 active={screen === "today"}
                 lift={lift}
                 onUseMyLocation={useMyLocation}
@@ -331,7 +311,7 @@ export function HomePage() {
             </div>
 
             <div
-              className={screenLayer(screen === "ask")}
+              className={screenLayer(screen === "ask", immersive)}
               aria-hidden={screen !== "ask"}
               inert={screen !== "ask"}
             >
@@ -339,7 +319,7 @@ export function HomePage() {
             </div>
 
             <div
-              className={screenLayer(screen === "why")}
+              className={screenLayer(screen === "why", immersive)}
               aria-hidden={screen !== "why"}
               inert={screen !== "why"}
             >
@@ -351,13 +331,13 @@ export function HomePage() {
           </div>
         </div>
       ) : (
-        <div className="relative px-4 py-6">
-          {header}
-          <nav aria-label="Screens" className="mt-4 flex gap-2">
+        <div className="relative z-10 min-h-screen overflow-hidden px-4 py-6">
+          <div className="relative z-10">{header}</div>
+          <nav aria-label="Screens" className="relative z-10 mt-4 flex gap-2">
             {NAV.map((item, index) => navLink(item, index))}
           </nav>
           <div
-            className={screen === "today" ? "screen-in" : "hidden"}
+            className={`relative z-10 transition-opacity duration-700 ${immersive ? "opacity-0" : "opacity-100"} ${screen === "today" ? "screen-in" : "hidden"}`}
             aria-hidden={screen !== "today"}
             inert={screen !== "today"}
           >
@@ -367,20 +347,22 @@ export function HomePage() {
               placeStatus={placeState.status}
               placeNote={placeState.note}
               region={region}
+              country={country}
+              area={area}
               active={screen === "today"}
               onUseMyLocation={useMyLocation}
               onViewFullMap={openImmersive}
             />
           </div>
           <div
-            className={screen === "ask" ? "screen-in" : "hidden"}
+            className={`relative z-10 transition-opacity duration-700 ${immersive ? "opacity-0" : "opacity-100"} ${screen === "ask" ? "screen-in" : "hidden"}`}
             aria-hidden={screen !== "ask"}
             inert={screen !== "ask"}
           >
             <AskPage desktop={false} onViewFullMap={openImmersive} />
           </div>
           <div
-            className={screen === "why" ? "screen-in" : "hidden"}
+            className={`relative z-10 transition-opacity duration-700 ${immersive ? "opacity-0" : "opacity-100"} ${screen === "why" ? "screen-in" : "hidden"}`}
             aria-hidden={screen !== "why"}
             inert={screen !== "why"}
           >
@@ -389,7 +371,6 @@ export function HomePage() {
         </div>
       )}
 
-      {immersive && <ImmersiveMap closing={immersiveClosing} onClose={closeImmersive} />}
     </div>
   );
 }

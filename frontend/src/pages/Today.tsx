@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Share2, Eye, ArrowUpRight, Flame, Wind, Radio, MapPin, RefreshCw, X } from "lucide-react";
 
-import worldMap from "@/assets/world-map.jpg";
-import miniMap from "@/assets/mini-map.jpg";
 import { COUNTRIES_BY_REGION } from "@/data/geo";
+import { appCountryFor } from "@/data/world";
+import { WorldMap } from "@/components/map/WorldMap";
+import { countrySelection } from "@/components/map/MapInteraction";
+import { loadMapData, type MapSelection } from "@/components/map/mapData";
 import { countryCenter, type Place } from "@/data/places";
 import { loadToday, type TodayReading } from "@/data/today";
 import type { PlaceStatus } from "@/hooks/usePlace";
@@ -13,22 +15,6 @@ import type { Evidence } from "@/lib/api";
 import { K, canvasPosition } from "@/lib/canvas";
 
 /* ---------- small building blocks ---------- */
-
-function Pin({ n, x, y, onClick }: { n: number; x: number; y: number; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={`Region ${n}`}
-      className="absolute flex flex-col items-center"
-      style={{ left: x * K, top: y * K, transform: "translate(-50%,-50%)" }}
-    >
-      <span className="relative flex size-[58px] items-center justify-center rounded-full bg-surface/30 backdrop-blur-[1px]">
-        <span className="absolute -top-1 text-[16px] font-medium text-surface">{n}</span>
-        <span className="mt-4 size-[16px] rounded-full bg-surface shadow" />
-      </span>
-    </button>
-  );
-}
 
 function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`rounded-[18px] bg-surface ${className}`}>{children}</div>;
@@ -163,6 +149,8 @@ export type TodayPageProps = {
   placeStatus: PlaceStatus;
   placeNote: string | null;
   region: string;
+  country: string;
+  area: string;
   active: boolean;
   /** Design-space upward offset so the cards clear the fold without scrolling. */
   lift?: number;
@@ -176,6 +164,8 @@ export function TodayPage({
   placeStatus,
   placeNote,
   region,
+  country,
+  area,
   active,
   lift = 0,
   onUseMyLocation,
@@ -187,6 +177,7 @@ export function TodayPage({
   const [panelOpen, setPanelOpen] = useState(true);
   const [sortDesc, setSortDesc] = useState(true);
   const [topRows, setTopRows] = useState<TopRow[] | null>(null);
+  const [miniMapSelection, setMiniMapSelection] = useState<MapSelection | null>(null);
 
   const { reading, status, error, retry } = useTodayReading(place, active);
   const verdict = reading?.verdict ?? null;
@@ -218,6 +209,34 @@ export function TodayPage({
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
+
+  useEffect(() => {
+    let alive = true;
+    if (!active || !country) {
+      setMiniMapSelection(null);
+      return;
+    }
+
+    loadMapData()
+      .then((data) => {
+        if (!alive) return;
+        const mapCountry = data.countries.find(
+          (candidate) => appCountryFor(candidate.name)?.country === country,
+        );
+        setMiniMapSelection(mapCountry ? countrySelection(mapCountry) : null);
+      })
+      .catch(() => {
+        if (alive) setMiniMapSelection(null);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [active, country]);
+
+  useEffect(() => {
+    setPanelOpen(true);
+  }, [active, region, country, area]);
 
   const activeRegion = region || place?.region || "";
 
@@ -272,6 +291,18 @@ export function TodayPage({
 
   const aqi = verdict?.aqi ?? null;
   const level = verdict?.level ?? "";
+  const areaLabel = area && country ? `${area}, ${country}` : country || region || place?.label || "Your area";
+  const areaNote =
+    placeNote ??
+    (place?.source === "ip"
+      ? "Approximate location from your network"
+      : area && country
+        ? "Selected area"
+        : country
+          ? "Country-wide view"
+          : region
+            ? "Choose a country to see local air quality"
+            : "Choose a location in the filters above");
 
   return (
     <>
@@ -286,38 +317,18 @@ export function TodayPage({
       </div>
       <button
         onClick={share}
-        style={pos(1592, 141, 116, 48)}
+        style={pos(1592, 129, 116, 48)}
         className={`flex items-center justify-center gap-2 rounded-[10px] bg-surface text-[18px] text-ink ${desktop ? "" : "h-10 px-5"}`}
       >
         Share <Share2 className="size-4" strokeWidth={1.6} />
       </button>
       <button
         onClick={onViewFullMap}
-        style={pos(1729, 141, 160, 48)}
+        style={pos(1729, 129, 160, 48)}
         className={`flex items-center justify-center gap-2 rounded-[10px] bg-ink text-[18px] text-surface ${desktop ? "" : "h-10 px-5"}`}
       >
         View Full Map <Eye className="size-5" strokeWidth={1.6} />
       </button>
-
-      {/* Pins */}
-      {desktop && (
-        <>
-          <Pin n={1} x={735} y={530} onClick={() => setPanelOpen(true)} />
-          <Pin n={2} x={1218} y={330} onClick={() => setPanelOpen(true)} />
-          <Pin n={6} x={1250} y={603} onClick={() => setPanelOpen(true)} />
-          <Pin n={5} x={735} y={738} onClick={() => setPanelOpen(true)} />
-        </>
-      )}
-
-      {!desktop && (
-        <img
-          src={worldMap}
-          alt="Relief world map coloured by risk level"
-          width={1920}
-          height={1280}
-          className="mt-6 w-full rounded-[18px]"
-        />
-      )}
 
       {/* Area panel */}
       {panelOpen && (
@@ -337,13 +348,10 @@ export function TodayPage({
               <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
                 <div className="min-w-0">
                   <h3 className="truncate text-[26px] tracking-[-0.01em] text-ink">
-                    {place?.label ?? "Your area"}
+                    {areaLabel}
                   </h3>
                   <p className="mt-0.5 text-[12px] text-ink-faint">
-                    {placeNote ??
-                      (place?.source === "ip"
-                        ? "Approximate location from your network"
-                        : "Chosen in the filters above")}
+                    {areaNote}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
@@ -386,14 +394,15 @@ export function TodayPage({
                 </div>
               </div>
             </div>
-            <img
-              src={miniMap}
-              alt="Map preview for this location"
-              loading="lazy"
-              width={1152}
-              height={576}
-              className="absolute bottom-0 left-0 h-[230px] w-full object-cover object-[60%_40%]"
-            />
+            <div className="absolute bottom-0 left-0 h-[230px] w-full overflow-hidden">
+              <WorldMap
+                selected={miniMapSelection}
+                onSelect={() => undefined}
+                overlay={false}
+                focusZoom={1.6}
+                className="pointer-events-none scale-[1.2]"
+              />
+            </div>
           </Card>
         </div>
       )}

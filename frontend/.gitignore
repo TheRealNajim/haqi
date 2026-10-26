@@ -26,3 +26,6 @@ dist
 *.njsproj
 *.sln
 *.sw?
+
+# 3D map build cache
+.cache/

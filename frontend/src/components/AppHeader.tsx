@@ -113,7 +113,7 @@ export function AppHeader({
       >
         <label
           style={desktop ? { width: 560 * K } : undefined}
-          className={`flex items-center gap-3 rounded-[10px] bg-surface px-4 ${
+          className={`flex items-center gap-3 rounded-[10px] border border-border bg-surface px-4 shadow-[var(--shadow-soft)] ${
             desktop
               ? ""
               : "h-10 w-full min-[900px]:w-auto min-[900px]:min-w-[150px] min-[900px]:flex-1"
@@ -159,7 +159,7 @@ export function AppHeader({
             <button
               onClick={() => setNotifOpen((open) => !open)}
               aria-label="Notifications"
-              className="relative flex h-full w-full items-center justify-center rounded-[10px] bg-surface text-ink"
+              className="relative flex h-full w-full items-center justify-center rounded-[10px] border border-border bg-surface text-ink shadow-[var(--shadow-soft)]"
             >
               <Bell className="size-5" strokeWidth={1.4} />
               {unreadCount > 0 && (
@@ -213,7 +213,7 @@ export function AppHeader({
             onClick={toggleTheme}
             aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
             style={desktop ? { width: 48 * K, height: 48 * K } : undefined}
-            className={`flex items-center justify-center rounded-[10px] bg-surface text-ink ${
+            className={`flex items-center justify-center rounded-[10px] border border-border bg-surface text-ink shadow-[var(--shadow-soft)] ${
               desktop ? "" : "size-10"
             }`}
           >

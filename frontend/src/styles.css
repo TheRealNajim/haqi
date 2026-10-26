@@ -203,6 +203,28 @@
   animation: screen-in 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes map-launch {
+  0% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.map-launch {
+  transform-origin: center;
+  animation: map-launch 800ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-launch {
+    animation: none;
+  }
+}
+
 @keyframes rail-in {
   from {
     opacity: 0;

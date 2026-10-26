@@ -37,3 +37,12 @@ services:
         sync: false
       - key: NEMOTRON_MODEL
         value: nvidia/nemotron-3.5-bolt-e4b
+      # Meterless narration lane (optional, sponsor Build/Power layer): the /why story only.
+      # All three or none - empty keeps the lane off and /why keeps its deterministic graph.
+      # Leave unset until Nightshift on the infra host can actually serve a completion.
+      - key: METERLESS_BASE_URL
+        sync: false
+      - key: METERLESS_API_KEY
+        sync: false
+      - key: METERLESS_MODEL
+        sync: false

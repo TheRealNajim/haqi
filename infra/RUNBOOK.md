@@ -74,8 +74,14 @@ docker compose ps --all
 
 Bundle facts:
 
-- `.env` ships filled in. Admin sign-in: `admin@zetaris.com` / `Zetaris1@` — change it from
-  the user menu (top right) after the first login.
+- `.env` ships filled in. Sign in as `admin@zetaris.com` with `ZETARIS_ADMIN_PASSWORD` from the
+  platform `.env` (org **1**) — that is the account that owns the project data and the REST key.
+  `haqi@zetaris.com` also exists in org **810**, but that organisation is empty, so the project
+  views and the API token list are invisible from it. Change the password from the user menu
+  (top right) after the first login.
+- Repeated failed sign-ins appear to lock the account for a while: after that, even the
+  correct password returns `{"msg":"Not Allowed"}` and the api logs `User does not exist`.
+  Wait a few minutes instead of retrying in a loop.
 - `.env` also holds the field-encryption keypair password. Back it up; without it, stored
   datasource credentials cannot be recovered.
 - Sizing: bundle `.env` = 2 GB / 2 cores (laptop). `ZSPARK_DRIVER_MEM` decides query speed;
@@ -87,9 +93,9 @@ URLs and endpoints (owned by infra; keep `docs/CONTRACTS.md` in sync):
 
 | Service | Address | Notes |
 |---|---|---|
-| Zetaris UI | <http://localhost:3000> | admin sign-in |
+| Zetaris UI | <http://localhost:3000> | sign in as `admin@zetaris.com` |
 | Zetaris REST | `http://localhost:8888/api/v1.0` | the only REST base |
-| REST port 8889 | do not use | internal |
+| REST port 8889 | internal | the UI's login route proxies here (`/api/v1.0/internal/auth/legacy-login`) |
 | Spark UI | <http://localhost:4040> | debugging only |
 | JDBC | `jdbc:zetaris:lightning@localhost:10000` | driver jar in `jdbc/` |
 
@@ -113,16 +119,53 @@ Sample data (registered on first start, read in place from the public bucket —
 outbound internet): `NY_TAXI` (15 CSV tables) and `TPCDS_DB` (24 Parquet tables). Try
 `SELECT * FROM NY_TAXI.customers LIMIT 10`.
 
-`ZETARIS_API_KEY`: In the Zetaris web UI at <http://localhost:3000>, navigate to:
-**Left sidebar -> Management (the shield/slider icon at the bottom) -> API Tokens**.
-Click "Create API Token", enter a name (e.g. `haqi-backend`), and save.
+`ZETARIS_API_KEY` — there is no token UI in this build.
 
-Token internals (25 Oct):
+`http://localhost:3000` has no Management / API Tokens page: the UI bundle carries no
+`api-key` route, and `POST /api/v1.0/auth/api-key` returns `404` on both 8888 and 8889 for a
+valid admin JWT (probed 26 Oct with four body shapes). `GET /api/v1.0/auth/api-key` does work
+and is the way to confirm what exists.
+
+Token internals (verified 26 Oct):
 - Zetaris API tokens have an `ak` prefix and a fixed length of 60 characters (`ak` + 58 hex chars).
-- The REST API hashes the incoming token with SHA-256 and matches it against `lightning_user_api_key.api_key`.
-- Key values live ONLY in `.env` (backend) / the Render dashboard (deploys) — never in any doc,
-  commit or chat. The October-25 key was printed into this file and leaked; it must be revoked
-  and replaced in Management -> API Tokens. Read keys from secrets, not from this page.
+- The REST API hashes the incoming token with SHA-256 and matches it against
+  `lightning_user_api_key.api_key`. Key values live only in `.env` and the Render dashboard —
+  never in a doc, commit or chat. Read keys from secrets, not from this page.
+- `lightning_user_api_key.api_key` stores **SHA-256 hex of the plaintext token** (64 chars).
+  Verified by hashing the live token from `.env` and matching the stored value.
+- Rows are scoped by `org_id` **and** `email`. The project data lives in org **1** under
+  `ADMIN@ZETARIS.COM`; a token created for any other org cannot see the views.
+
+The key can disappear. `infra/zetaris/restore-key.ps1` puts it back and proves it:
+
+```powershell
+powershell -NoProfile -File infra/zetaris/restore-key.ps1
+```
+
+It is idempotent — inserts the row only when the SHA-256 of the `.env` token is missing, then
+runs `SELECT 1` through the REST contract. **Run it after any stack restart or bootstrap
+re-run**, before blaming the backend. Symptom when the row is gone: every container reports
+healthy, `verify.sh` still passes (it logs in rather than using the key), and every
+`ZETARIS_API_KEY` call returns `400`.
+
+Rotating the key by hand:
+
+1. Generate a token: `ak` + 58 lowercase hex characters.
+2. Compute `sha256(token)` -> 64 lowercase hex characters.
+3. Insert into the metastore, using the org and email the recipe is reachable from:
+   `insert into lightning_user_api_key (id,name,org_id,email,api_key,created_at,expired_at,last_used_at,api_key_masked) values ('<uuid>','<name>',1,'ADMIN@ZETARIS.COM','<sha256>',now(),'2031-10-26',null,'<mask>');`
+   Run it as `docker exec zetaris-postgres-1 psql -U zetaris -d metastore -c "..."`.
+4. Prove the new token **before** removing anything: `SELECT 1` through the REST contract
+   above. If it does not return `1`, delete the row you just inserted and stop.
+5. Delete the old rows by id, then re-run `infra/healthcheck.ps1` and
+   `infra/zetaris/check-recipe.ps1`.
+6. Update `.env` and the offline secrets file. Never paste the value into docs, commits or
+   chat.
+
+Rotation log: 26 Oct — `haqi-official-key` (the leaked one) and `haqi-backend-key` were
+deleted and replaced by `haqi-backend-20261026` (org 1, 5-year expiry). The leaked token now
+returns `400` from the query engine, so the copy sitting in git history is inert. Never
+paste the value into docs, commits or chat; regenerate with the steps above if it leaks again.
 
 ## 3. Meterless and the Nemotron route
 

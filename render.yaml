@@ -37,13 +37,12 @@ services:
         sync: false
       - key: NEMOTRON_MODEL
         value: nvidia/nemotron-3.5-bolt-e4b
-      # --- Sponsor slots: deliberately NOT declared (26 Oct decision) ---
-      # The deployed demo is Render-only. Zetaris is a four-container Docker stack on the
-      # infra PC and Meterless has no cloud edition, so neither can be served from here.
-      # Declaring them would make the blueprint ask for values we have decided not to
-      # supply; leaving them out keeps /sources/status at configured:false - a disclosed
-      # blind a judge can read, instead of an error a judge has to interpret.
-      # Names stay in .env.example for a later re-arm.
+      # --- Sponsor slots (values held in Render only, never in the blueprint) ---
+      # TEAM decision (26 Oct night): HYBRID LIVE demo — RENDER keeps the
+      # Zetaris slot armed (it reads an env-state true/false on /sources/status
+      # with a short liveness probe) and Meterless joins when Nightshift's
+      # weights are ready. Between demos the tunnel may be down; status then
+      # shows reachable:false, an honest gap, never an error page.
       #
       # - key: ZETARIS_REST_URL
       #   sync: false

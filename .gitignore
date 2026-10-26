@@ -23,6 +23,10 @@ __pycache__/
 # runtime state (trust ledger receipts live on disk, not in git)
 backend/data/
 
+# infra backups: metastore dumps and a copy of the platform .env with keys
+backups/
+*.dump
+
 
 # node
 node_modules/

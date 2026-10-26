@@ -74,8 +74,14 @@ docker compose ps --all
 
 Bundle facts:
 
-- `.env` ships filled in. Admin sign-in: `admin@zetaris.com` / `Zetaris1@` — change it from
-  the user menu (top right) after the first login.
+- `.env` ships filled in. Sign in as `admin@zetaris.com` with `ZETARIS_ADMIN_PASSWORD` from the
+  platform `.env` (org **1**) — that is the account that owns the project data and the REST key.
+  `haqi@zetaris.com` also exists in org **810**, but that organisation is empty, so the project
+  views and the API token list are invisible from it. Change the password from the user menu
+  (top right) after the first login.
+- Repeated failed sign-ins appear to lock the account for a while: after that, even the
+  correct password returns `{"msg":"Not Allowed"}` and the api logs `User does not exist`.
+  Wait a few minutes instead of retrying in a loop.
 - `.env` also holds the field-encryption keypair password. Back it up; without it, stored
   datasource credentials cannot be recovered.
 - Sizing: bundle `.env` = 2 GB / 2 cores (laptop). `ZSPARK_DRIVER_MEM` decides query speed;
@@ -87,9 +93,9 @@ URLs and endpoints (owned by infra; keep `docs/CONTRACTS.md` in sync):
 
 | Service | Address | Notes |
 |---|---|---|
-| Zetaris UI | <http://localhost:3000> | admin sign-in |
+| Zetaris UI | <http://localhost:3000> | sign in as `admin@zetaris.com` |
 | Zetaris REST | `http://localhost:8888/api/v1.0` | the only REST base |
-| REST port 8889 | do not use | internal |
+| REST port 8889 | internal | the UI's login route proxies here (`/api/v1.0/internal/auth/legacy-login`) |
 | Spark UI | <http://localhost:4040> | debugging only |
 | JDBC | `jdbc:zetaris:lightning@localhost:10000` | driver jar in `jdbc/` |
 
@@ -113,16 +119,72 @@ Sample data (registered on first start, read in place from the public bucket —
 outbound internet): `NY_TAXI` (15 CSV tables) and `TPCDS_DB` (24 Parquet tables). Try
 `SELECT * FROM NY_TAXI.customers LIMIT 10`.
 
-`ZETARIS_API_KEY`: In the Zetaris web UI at <http://localhost:3000>, navigate to:
-**Left sidebar -> Management (the shield/slider icon at the bottom) -> API Tokens**.
-Click "Create API Token", enter a name (e.g. `haqi-backend`), and save.
+`ZETARIS_API_KEY` — there is no token UI in this build.
 
-Token internals (25 Oct):
+`http://localhost:3000` has no Management / API Tokens page: the UI bundle carries no
+`api-key` route, and `POST /api/v1.0/auth/api-key` returns `404` on both 8888 and 8889 for a
+valid admin JWT (probed 26 Oct with four body shapes). `GET /api/v1.0/auth/api-key` does work
+and is the way to confirm what exists.
+
+Token internals (verified 26 Oct):
 - Zetaris API tokens have an `ak` prefix and a fixed length of 60 characters (`ak` + 58 hex chars).
-- The REST API hashes the incoming token with SHA-256 and matches it against `lightning_user_api_key.api_key`.
-- Key values live ONLY in `.env` (backend) / the Render dashboard (deploys) — never in any doc,
-  commit or chat. The October-25 key was printed into this file and leaked; it must be revoked
-  and replaced in Management -> API Tokens. Read keys from secrets, not from this page.
+- The REST API hashes the incoming token with SHA-256 and matches it against
+  `lightning_user_api_key.api_key`. Key values live only in `.env` and the Render dashboard —
+  never in a doc, commit or chat. Read keys from secrets, not from this page.
+- `lightning_user_api_key.api_key` stores **SHA-256 hex of the plaintext token** (64 chars).
+  Verified by hashing the live token from `.env` and matching the stored value.
+- Rows are scoped by `org_id` **and** `email`. The project data lives in org **1** under
+  `ADMIN@ZETARIS.COM`; a token created for any other org cannot see the views.
+
+The key can disappear. `infra/zetaris/restore-key.ps1` puts it back and proves it:
+
+```powershell
+powershell -NoProfile -File infra/zetaris/restore-key.ps1
+```
+
+It is idempotent — inserts the row only when the SHA-256 of the `.env` token is missing, then
+runs `SELECT 1` through the REST contract. **Run it after any stack restart or bootstrap
+re-run**, before blaming the backend. Symptom when the row is gone: every container reports
+healthy, `verify.sh` still passes (it logs in rather than using the key), and every
+`ZETARIS_API_KEY` call returns `400`.
+
+Rotating the key by hand:
+
+1. Generate a token: `ak` + 58 lowercase hex characters.
+2. Compute `sha256(token)` -> 64 lowercase hex characters.
+3. Insert into the metastore, using the org and email the recipe is reachable from:
+   `insert into lightning_user_api_key (id,name,org_id,email,api_key,created_at,expired_at,last_used_at,api_key_masked) values ('<uuid>','<name>',1,'ADMIN@ZETARIS.COM','<sha256>',now(),'2031-10-26',null,'<mask>');`
+   Run it as `docker exec zetaris-postgres-1 psql -U zetaris -d metastore -c "..."`.
+4. Prove the new token **before** removing anything: `SELECT 1` through the REST contract
+   above. If it does not return `1`, delete the row you just inserted and stop.
+5. Delete the old rows by id, then re-run `infra/healthcheck.ps1` and
+   `infra/zetaris/check-recipe.ps1`.
+6. Update `.env` and the offline secrets file. Never paste the value into docs, commits or
+   chat.
+
+Rotation log: 26 Oct — `haqi-official-key` (the leaked one) and `haqi-backend-key` were
+deleted and replaced by `haqi-backend-20261026` (org 1, 5-year expiry). The leaked token now
+returns `400` from the query engine, so the copy sitting in git history is inert. Never
+paste the value into docs, commits or chat; regenerate with the steps above if it leaks again.
+
+### After any stack restart
+
+A restart can leave every container `healthy` while two things are silently gone: the API key
+row and the recipe catalog. Both were lost on 26 Oct and nothing in `docker ps` said so. Run
+these before blaming the backend or the adapter:
+
+```powershell
+powershell -NoProfile -File infra/zetaris/restore-key.ps1
+powershell -NoProfile -File infra/zetaris/ensure-recipe.ps1
+powershell -NoProfile -File infra/healthcheck.ps1
+```
+
+Both repair scripts are idempotent — they probe first and only write what is missing. `verify.sh`
+is not enough on its own: it signs in with the admin password, so it passes 9/9 even when the
+REST key and the recipe are gone.
+
+**Do not run `docker compose up` during the demo window.** A re-run can reset the catalog, and
+the recovery is two scripts plus a minute of waiting.
 
 ## 3. Meterless and the Nemotron route
 
@@ -185,8 +247,33 @@ Create a key at build.nvidia.com, then set all three rows together:
 ```
 MODEL_BASE_URL=https://integrate.api.nvidia.com/v1
 MODEL_API_KEY=<build.nvidia.com key>
-NEMOTRON_MODEL=nvidia/nemotron-3-super-120b-a12b
+NEMOTRON_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b
 ```
+
+Verified live 26 Oct with our key: 85 ids in `GET /v1/models`, this id present, and a chat
+completion answered in ~1.6 s. `nvidia/nemotron-3.5-bolt-e4b` and
+`nvidia/nemotron-3-super-120b-a12b` are both still listed in the catalogue, so the id is a
+choice, not a constraint — pick one and use it everywhere (local `.env`, Render, docs).
+
+Verify without the app:
+
+```bash
+curl -s -H "Authorization: Bearer $KEY" https://integrate.api.nvidia.com/v1/models | jq -r '.data[].id' | grep nemotron
+curl -s https://integrate.api.nvidia.com/v1/chat/completions \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"model":"nvidia/nemotron-3.5-lightning-30b-a3b","messages":[{"role":"user","content":"Reply with the single word: ready"}],"max_tokens":400}'
+```
+
+**Thinking is on by default and eats the token budget.** The same prompt costs 155 completion
+tokens by default (reasoning lands in `message.reasoning_content`) and 2 with
+`chat_template_kwargs: {"enable_thinking": false}`. A small `max_tokens` therefore returns
+`finish_reason: stop` with **empty `content`** — that is not a broken route. The product's
+`chat()` sends no `max_tokens`, so it works, but the parse step pays for reasoning it does not
+need; `enable_thinking: false` is worth setting in the backend for latency.
+
+Meterless is a separate route with a separate token (`%LOCALAPPDATA%\ai.meterless.runtime\proxy-token`).
+Once `MODEL_API_KEY` holds the NVIDIA key, the Meterless `/v1/models` call answers `401` —
+that is expected. Only `/healthz` is needed from Meterless for eligibility.
 
 ## 4. Repo `.env` (never committed)
 
@@ -226,10 +313,50 @@ Keys go in **Render → haqi-api → Environment**, never chat and never a commi
 
 - `backend/.env.example` and `render.yaml` list the names; `sync: false` makes Render ask for
   each value when the blueprint applies.
-- Render cannot reach this PC. `ZETARIS_REST_URL=http://localhost:8888/api/v1.0` is dead from
-  Render until there is a tunnel (Tailscale/Cloudflare) or Zetaris lives somewhere reachable.
-  Do not paste it into the dashboard and call the slot armed.
+- Render cannot reach this PC. The loopback value `ZETARIS_REST_URL=http://localhost:8888/api/v1.0`
+  is dead from Render — use the tunnel below, and never paste the loopback URL into the dashboard
+  and call the slot armed.
 - Free-tier disk is ephemeral: `HAQI_DATA_DIR` (the trust ledger) does not survive a redeploy.
+
+#### Exposing Zetaris to Render (quick tunnel)
+
+The deployed API is the product, so the Zetaris slot there needs a public URL. `cloudflared`
+puts one in front of the loopback REST port:
+
+```powershell
+powershell -NoProfile -File infra\zetaris\tunnel.ps1          # status + the rows to paste
+powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Start   # start (downloads cloudflared once)
+powershell -NoProfile -File infra\zetaris\tunnel.ps1 -Stop
+```
+
+`-Start` prints the three rows and proves the tunnel with a real `SELECT 1` through the public
+hostname. Paste into Render → Environment, then redeploy:
+
+```
+ZETARIS_REST_URL=https://<random>.trycloudflare.com/api/v1.0
+ZETARIS_ORG_ID=1
+ZETARIS_API_KEY=<the ak token already in .env>
+```
+
+Verified 26 Oct through the public hostname: `SELECT 1` → `1`, the recipe row
+(`open-meteo:lagos | 14.0 | ugm3 | 17:00Z`), and **no key → `400`** — the URL alone opens nothing.
+
+Caveats, in order of how likely they are to bite:
+
+- **The hostname changes on every cloudflared restart.** Quick tunnels are anonymous; there is
+  no stable name without a Cloudflare account. After a restart, re-run `-Start` and update
+  `ZETARIS_REST_URL` in Render + redeploy. Nothing on this PC can update Render by itself — there
+  is no Render API key here.
+- **If cloudflared dies, Render's Zetaris slot fails loudly**, not silently: the adapter raises
+  an unreachable error rather than inventing a reading.
+- **The edge is public.** The hostname is unguessable, Zetaris still requires the bearer key, and
+  the REST port is the one meant to be called. Still: `/Stop` it after the event.
+- **A `configured: true` slot is not an integration.** On `main` after `fc685f5`, `_sql_for()`
+  queries the recipe view, but `ZetarisAdapter` is still absent from
+  `backend/app/agent.py::_adapters_for` — see `infra/zetaris/README.md` § Adapter wiring. Until
+  that one line lands, the tunnel makes the badge green and changes no verdict.
+- The tunnel process is detached through a VBS `ShellExecute`. `Start-Process` and WMI both fail
+  here: one holds the caller's console handle (piping hangs), the other kills cloudflared.
 
 ## 5. Ports (infra documents reality)
 
@@ -271,7 +398,8 @@ It is read-only and exits non-zero if anything required is down. It checks: Dock
 the four Zetaris services and their health, the two one-shot jobs (`init`, `bootstrap` must
 be `exited 0`, not running), UI `/api/config`, a real `SELECT 1` through REST with the API
 key from `.env`, the published recipe (`haqi_views.air_quality_readings`) returning a fresh
-contract row, and the Meterless hotspot plus `/v1/models`. Secrets are read from `.env`
+contract row, the Meterless hotspot (`/healthz`, eligibility), and the configured model
+route end to end — catalogue, id present, and a real completion. Secrets are read from `.env`
 and never printed. Sample output on a good day:
 
 ```
@@ -280,17 +408,19 @@ and never printed. Sample output on a good day:
   PASS  init: completed (exit 0)     PASS  bootstrap: completed (exit 0)
   PASS  ui: /api/config 200
   PASS  zetaris rest: SELECT 1 -> 1
-  PASS  recipe: haqi_views.air_quality_readings -> 15.0 ugm3, 0.6 h old
+  PASS  recipe: haqi_views.air_quality_readings -> 13.4 ugm3, 0.2 h old
   PASS  meterless: /healthz http://127.0.0.1:8088
-  PASS  meterless: /v1/models 73 ids
-  WARN  model route: meterless/auto has no provider - product answers fall back to the deterministic path
+  PASS  model route: integrate.api.nvidia.com / nvidia/nemotron-3.5-lightning-30b-a3b
+  PASS  model route: id present in catalogue (85 ids)
+  PASS  model route: nvidia/nemotron-3.5-lightning-30b-a3b replied (ready)
 
-Infra is up, 1 warning(s). Read them before the demo.
+All required checks passed. Demo-ready.
 ```
 
-A `WARN` on the model route is the honest state on 25 Oct: the hotspot is up but nothing serves
-it, so `/v1/models` passes while a completion returns `400`. Pass means infra; the provider is
-a separate credential (`§3`).
+The route block also catches the failure this whole document keeps repeating: a Meterless id
+sent to NVIDIA, or an `nvidia/*` id sent to localhost, is reported as `routes mixed` before
+anything queries it. A `400` on the completion still shows as `WARN` (endpoint up, no provider)
+because that is the Meterless-without-a-key state, not a crash.
 
 Autostart after a reboot (verified 25 Oct):
 
@@ -330,6 +460,56 @@ powershell -ExecutionPolicy Bypass -File infra\zetaris\check-recipe.ps1 -Table h
 `infra/zetaris/README.md` has the exact DDL, the live output, and the remaining gaps (PM2.5
 only; WAQI/OpenAQ/OpenWeather/FIRMS wait on their API keys). The rules themselves are proven by
 `-SelfTest`, which needs no network.
+
+Publishing the name is necessary but **not sufficient**. On `main` after `fc685f5`, `_sql_for()`
+already queries this view in contract order — but `ZetarisAdapter` is still not in the agent's
+adapter list (`backend/app/agent.py`, `_adapters_for`). Until that one line lands,
+`configured: true` on `/sources/status` is cosmetic and the sponsor layer contributes nothing to
+`/today`. The wiring snippet is in `infra/zetaris/README.md` § Adapter wiring.
+
+### Running the demo from this PC
+
+The deployed API cannot see Zetaris on `127.0.0.1:8888`, so its Zetaris slot is an honest
+blind no matter what key is pasted into Render. There are two topologies:
+
+| | Run here | Deployed (Render) |
+|---|---|---|
+| Zetaris slot | real, over loopback | blind — needs a tunnel |
+| Other sources | only if their keys are in `.env` | OpenAQ, Weather, Fire live |
+| Nemotron | NVIDIA hosted | NVIDIA hosted |
+| Network exposure | none (loopback only) | public |
+
+With the source keys in `.env` and the adapter wired, running here is the only topology where
+every slot is genuine. **Decision taken 26 Oct: the demo runs on the deployed API, with Zetaris
+reached through the quick tunnel (§4).** This local runner stays documented as the fallback for
+the case where the tunnel or Render is down — it needs no network path at all. One command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1          # preflight, then start
+powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1 -Status  # what is listening
+powershell -ExecutionPolicy Bypass -File infra\demo-local.ps1 -Stop    # stop api + web
+```
+
+It refuses to start when the product keys are missing, because `/today` would then answer
+`0/4 sources` — a worse demo than the deployed one. `-Force` starts anyway. On start it also
+re-runs `restore-key.ps1` and `ensure-recipe.ps1`, so a stack restart between runs cannot leave
+you with a dead key or a missing view.
+
+What it starts, and why each flag matters:
+
+- **api** — `.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`.
+  Loopback only, unlike `uvicorn --host 0.0.0.0`.
+- **web** — `npm run dev -- --host 127.0.0.1 --port 5173` with
+  `VITE_API_PROXY_TARGET=http://127.0.0.1:8000`. The dev server always calls same-origin `/api`
+  and proxies it to that target; without the variable it proxies to the deployed API and you
+  are back to the blind slot. Vite binds every interface by default — the `--host` flag is what
+  keeps it on loopback.
+- Launchers, PIDs and logs live in `%LOCALAPPDATA%\haqi-demo\` (`api.log`, `web.log`). The
+  children are created through WMI, not `Start-Process`, so piping this script's output does
+  not hang waiting for a server that never exits.
+
+`Zetaris` and `Meterless` are not touched by the script; they keep running for eligibility
+either way.
 
 ## 7. Backup and recovery
 

@@ -36,4 +36,4 @@ services:
       - key: MODEL_API_KEY
         sync: false
       - key: NEMOTRON_MODEL
-        value: nvidia/nemotron-3.5-bolt-e4b
+        value: nvidia/nemotron-3.5-lightning-30b-a3b

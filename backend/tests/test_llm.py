@@ -84,3 +84,31 @@ def test_sweep_corpus_stays_sane():
         if expected:
             assert p["time_hh"] == expected[0]
             assert p["activity"] == expected[1]
+
+
+def test_floor_beats_llm_time_and_activity_survives(monkeypatch):
+    """Nemotron misreads relative phrases ('in 2 hours' -> hh 2); the regex
+    floor is regex-provable and always wins on time, never on activity."""
+    import agent.llm as L
+
+    class FakeClient:
+        def chat_completions_create(self, **kw):
+            raise AssertionError("use chat() shim")
+    monkeypatch.setattr(L, "_get_client", lambda: object())
+    monkeypatch.setattr(
+        L, "chat", lambda *a, **k: '{"activity": "cycle", "time_hh": 2, "time_desc": "hours"}'
+    )
+    out = L.parse_question("can I cycle in 2 hours")
+    now_h = datetime.now().hour
+    assert out["time_hh"] == (now_h + 2) % 24  # floor won
+    assert out["activity"] == "cycle"          # model nuance kept
+
+
+def test_model_string_time_hh_coerced_to_int(monkeypatch):
+    import agent.llm as L
+    monkeypatch.setattr(L, "_get_client", lambda: object())
+    monkeypatch.setattr(
+        L, "chat", lambda *a, **k: '{"activity": "football", "time_hh": "16", "time_desc": "4 pm"}'
+    )
+    out = L.parse_question("football")
+    assert isinstance(out["time_hh"], int) and out["time_hh"] == 16

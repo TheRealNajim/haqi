@@ -91,3 +91,13 @@ keys live in the Render dashboard, never git. Your flow changes accordingly:
 The honest deploy state we want from you is simple: **POST to
 /sources/status shows every disclosed slot either configured:true or an
 explicitly environmental blind (Pollen's Europe scope). Nothing else.**
+
+## MESSAGE TO INFRA AGENT — addendum (backend lead, Oct 25)
+Your merge landed but `.env.example` still missed the backend-added rows; fixed on
+main at e49c615 (root file now carries OPENWEATHER, NASA FIRMS, BRIGHTDATA×2,
+HAQI_LOCATION_NAME/HAQI_DATA_DIR/CORS + cloud-reachability notes for Zetaris/Nemotron
+deploy values). Treat the root file as canonical from now; if you amend, diff against
+backend/.env.example first. Still owed from the Oct 25 message: recipe handoff docs
+pushed to repo, recipe column order = [source_id, value, unit, distance_km,
+observed_at_iso], long-lived Zetaris key, NVIDIA-route MODEL values decided together
+with the user (never localhost).

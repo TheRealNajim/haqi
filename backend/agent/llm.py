@@ -60,28 +60,12 @@ _NOON_RE = re.compile(r"\b(noon|midday)\b", re.I)
 _MIDNIGHT_RE = re.compile(r"\bmidnight\b", re.I)
 
 
-def parse_question(question: str) -> dict:
-    """PARSE step. Nemotron when configured; deterministic fallback otherwise."""
-    if _get_client() is not None:
-        try:
-            out = chat(
-                "Extract {activity, time_hh, time_desc} from this kid question. "
-                "Reply ONLY compact JSON.",
-                question,
-            )
-            data = json.loads(out)
-            if isinstance(data, dict) and data.get("activity"):
-                return data
-        except Exception:
-            pass  # fall through to heuristics — never block on the power layer
-    q = (question or "").lower()
-    activity = "play"
-    for word, canon in _ACTIVITY_WORDS.items():
-        if word in q:
-            activity = canon
-            break
-    m = _TIME_RE.search(q)
+def _time_floor(q: str) -> dict | None:
+    """Deterministic time reading: relative offsets and named times the model
+    cannot be trusted to decode alone. These patterns, when matched, beat the
+    LLM's guess — horizon honesty depends on the time being exactly right."""
     now = datetime.now()
+    m = _TIME_RE.search(q)
     m_rel = re.search(r"in\s+(\d{1,2})\s*(hours?|hrs?)\b", q)
     if m_rel:
         # "in 2 hours" is a relative offset, not the 2 o'clock slot; the bare
@@ -90,7 +74,6 @@ def parse_question(question: str) -> dict:
         if 1 <= n <= 12:
             window_dt = now + timedelta(hours=n)
             return {
-                "activity": activity,
                 "time_hh": window_dt.hour,
                 "time_desc": window_dt.strftime("%I%p").lstrip("0").lower(),
             }
@@ -101,10 +84,51 @@ def parse_question(question: str) -> dict:
         if window_dt < now:
             window_dt += timedelta(days=1)
         return {
-            "activity": activity,
             "time_hh": window_dt.hour,
             "time_desc": window_dt.strftime("%I%p").lstrip("0").lower(),
         }
+    return None
+
+
+def parse_question(question: str) -> dict:
+    """PARSE step. Nemotron when configured; deterministic fallback otherwise."""
+    q_all = (question or "").lower()
+    floor = _time_floor(q_all)
+    if _get_client() is not None:
+        try:
+            out = chat(
+                "Extract {activity, time_hh, time_desc} from this kid question. "
+                "time_hh is a 0-23 integer in the kid's local clock. time_desc is "
+                "a full short label like '4pm' or 'noon' (never just 'am'/'pm'). "
+                "Reply ONLY compact JSON.",
+                question,
+            )
+            data = json.loads(out)
+            if isinstance(data, dict) and data.get("activity"):
+                # times are safety-adjacent (horizon rule): a regex-provable
+                # reading always wins over the model's free-text decode
+                if floor is not None:
+                    data["time_hh"] = floor["time_hh"]
+                    data["time_desc"] = floor["time_desc"]
+                try:  # models like strings; the horizon math needs ints
+                    data["time_hh"] = int(data.get("time_hh", 0))
+                except (TypeError, ValueError):
+                    data["time_hh"] = 0  # "now" — the safe default
+                return data
+            raise ValueError("model reply not a usable parse")
+        except Exception:
+            pass  # fall through to heuristics — never block on the power layer
+    q = (question or "").lower()
+    activity = "play"
+    for word, canon in _ACTIVITY_WORDS.items():
+        if word in q:
+            activity = canon
+            break
+    floor = _time_floor(q)
+    if floor:
+        return {"activity": activity, **floor}
+    m = _TIME_RE.search(q)
+    now = datetime.now()
     if m:
         hh = int(m.group(1))
         mm = int(m.group(3)) if m.group(3) else None

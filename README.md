@@ -67,6 +67,8 @@ forecast horizon the series does not pretend.
 
 ## How the sponsor stack is used
 
+The submission-grade write-up is [SPONSOR.md](SPONSOR.md). Summary:
+
 | Sponsor | Where it runs | What it does | Integration artifact |
 |---|---|---|---|
 | Zetaris Lightning | infra PC, REST tunnel | recipe view `haqi_views.air_quality_readings` — one row = [source_id, raw_value, unit, distance_km, observed_at] | `ZetarisAdapter._sql_for()` emits the exact recipe SQL; `_to_evidence()` quarantines malformed rows visibly (weight 0) instead of silently dropping them; `tests/test_zetaris.py` |

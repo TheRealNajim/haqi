@@ -1,4 +1,4 @@
-"""Zetaris adapter: structure fully testable now; recipe-gated SQL proven pending."""
+"""Zetaris adapter: recipe-backed SQL + row mapping, fully testable offline."""
 import asyncio
 from datetime import datetime, timedelta, timezone
 
@@ -18,9 +18,17 @@ FRESH_ISO = NOW.isoformat()
 STALE_ISO = (NOW - timedelta(days=1)).isoformat()
 
 
-def test_recipe_pending_never_guesses_sql():
-    with pytest.raises(AdapterError):
-        ZetarisAdapter()._sql_for(6.5244, 3.3792)
+def test_recipe_sql_matches_the_registered_view():
+    sql = ZetarisAdapter()._sql_for(6.5244, 3.3792)
+    assert sql == (
+        "SELECT source_id, raw_value, unit, distance_km, observed_at "
+        "FROM haqi_views.air_quality_readings"
+    )
+
+
+def test_recipe_table_name_is_env_tunable(monkeypatch):
+    monkeypatch.setenv("ZETARIS_AQ_TABLE", "haqi_views.other_table")
+    assert "FROM haqi_views.other_table" in ZetarisAdapter()._sql_for(0, 0)
 
 
 def test_unconfigured_gather_is_blind(monkeypatch):
@@ -33,8 +41,12 @@ def test_unconfigured_gather_is_blind(monkeypatch):
 def test_configured_but_recipe_pending(monkeypatch):
     monkeypatch.setenv("ZETARIS_REST_URL", "http://localhost:8888/api/v1.0")
     monkeypatch.setenv("ZETARIS_API_KEY", "k")
-    with pytest.raises(AdapterError):
-        asyncio.run(ZetarisAdapter().gather(6.5244, 3.3792))
+    from app.adapters import zetaris as Z
+    async def fake_sql(sql, limit=50):
+        return [_row("l1", 21.5, "ugm3", None, FRESH_ISO)]
+    monkeypatch.setattr(Z, "run_sql", fake_sql)
+    evs = asyncio.run(ZetarisAdapter().gather(6.5244, 3.3792))
+    assert [e.source_id for e in evs] == ["zetaris:l1"]
 
 
 def test_good_rows_map_to_evidence():

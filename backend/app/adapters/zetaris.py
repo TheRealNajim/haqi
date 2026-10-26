@@ -39,10 +39,16 @@ class ZetarisAdapter(BaseAdapter):
         self.primary_error: str | None = None
 
     def _sql_for(self, lat: float, lon: float) -> str:
-        """Query template from infra recipe. Recipe unknown -> refuse to guess."""
-        raise AdapterError(
-            "zetaris: Lightning table recipes pending from infra — "
-            "no query is guessed until they land"
+        """Query the infra-registered view. The recipe is verified (see
+        infra/zetaris/README.md): haqi_views.air_quality_readings emits rows in
+        our exact contract order [source_id, raw_value, unit, distance_km,
+        observed_at]; extra columns may follow and are ignored by the mapper.
+        Table name is env-tunable (ZETARIS_AQ_TABLE) WITHOUT renaming its
+        columns — only infra changes the underlying view."""
+        table = os.getenv("ZETARIS_AQ_TABLE", "haqi_views.air_quality_readings")
+        return (
+            f"SELECT source_id, raw_value, unit, distance_km, observed_at "
+            f"FROM {table}"
         )
 
     def _to_evidence(self, rows: list[list],

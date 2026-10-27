@@ -315,7 +315,7 @@ export function HomePage() {
               aria-hidden={screen !== "ask"}
               inert={screen !== "ask"}
             >
-              <AskPage desktop onViewFullMap={openImmersive} />
+              <AskPage desktop onViewFullMap={openImmersive} onViewWhy={() => navigate("why")} />
             </div>
 
             <div
@@ -359,7 +359,7 @@ export function HomePage() {
             aria-hidden={screen !== "ask"}
             inert={screen !== "ask"}
           >
-            <AskPage desktop={false} onViewFullMap={openImmersive} />
+            <AskPage desktop={false} onViewFullMap={openImmersive} onViewWhy={() => navigate("why")} />
           </div>
           <div
             className={`relative z-10 transition-opacity duration-700 ${immersive ? "opacity-0" : "opacity-100"} ${screen === "why" ? "screen-in" : "hidden"}`}

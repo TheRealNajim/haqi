@@ -8,6 +8,7 @@ import {
 } from "react";
 import {
   ArrowUp,
+  BadgeQuestionMark,
   BookOpenCheck,
   ChartNoAxesCombined,
   CircleAlert,
@@ -43,6 +44,7 @@ import { K, W, canvasPosition } from "@/lib/canvas";
 type AskPageProps = {
   desktop: boolean;
   onViewFullMap: () => void;
+  onViewWhy: () => void;
 };
 
 const CAPABILITY_ICONS: Record<CapabilityId, LucideIcon> = {
@@ -416,7 +418,8 @@ function Comparison({ comparison }: { comparison: AnswerComparison }) {
   );
 }
 
-function AnswerBody({ answer }: { answer: DemoAnswer }) {
+function AnswerBody({ answer, onViewWhy }: { answer: DemoAnswer; onViewWhy: () => void }) {
+  const blindSpots = answer.blindSpots?.filter((spot) => spot.trim() && spot.trim() !== "-") ?? [];
   return (
     <div aria-live="polite">
       {!answer.provenance.live && (
@@ -444,7 +447,18 @@ function AnswerBody({ answer }: { answer: DemoAnswer }) {
       </span>
 
       <h2 className="mt-3 font-display leading-[1.25] text-ink text-[28px]">{answer.title}</h2>
-      <p className="mt-2 leading-[1.6] text-ink-soft text-[17px]">{answer.summary}</p>
+      <div className="mt-2 flex items-start gap-2">
+        <p className="min-w-0 flex-1 leading-[1.6] text-ink-soft text-[17px]">{answer.summary}</p>
+        <button
+          type="button"
+          onClick={onViewWhy}
+          aria-label="View the evidence behind this decision"
+          title="See why"
+          className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
+        >
+          <BadgeQuestionMark className="size-5" strokeWidth={1.7} />
+        </button>
+      </div>
 
       <div className="mt-5 grid gap-2 min-[520px]:grid-cols-3">
         {answer.metrics.map((metric) => (
@@ -499,16 +513,13 @@ function AnswerBody({ answer }: { answer: DemoAnswer }) {
         ))}
       </div>
 
-      {answer.blindSpots && answer.blindSpots.length > 0 ? (
+      {blindSpots.length > 0 ? (
         <div className="mt-6">
           <h3 className="font-medium uppercase tracking-[0.1em] text-ink-faint text-[11px]">
             Blind spots
           </h3>
-          <p className="mt-1 leading-[1.55] text-ink-faint text-[12px]">
-            Gaps disclosed by the backend. They are part of the answer, not an error.
-          </p>
           <ul className="mt-2 flex flex-wrap gap-2">
-            {answer.blindSpots.map((spot) => (
+            {blindSpots.map((spot) => (
               <li
                 key={spot}
                 className="inline-flex max-w-full items-start gap-1.5 rounded-full border border-dashed border-border bg-canvas px-3 py-1.5 leading-[1.45] text-ink-soft text-[12px]"
@@ -576,12 +587,14 @@ function AnswerPanel({
   desktop,
   wide,
   onNewQuestion,
+  onViewWhy,
   scrollRef,
 }: {
   exchange: Exchange;
   desktop: boolean;
   wide: boolean;
   onNewQuestion: () => void;
+  onViewWhy: () => void;
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
   const liveAnswer = exchange.answer ? exchange.answer.provenance.live : !FIXTURES_MODE;
@@ -632,7 +645,7 @@ function AnswerPanel({
 
           {exchange.answer ? (
             <div className="mt-6">
-              <AnswerBody answer={exchange.answer} />
+              <AnswerBody answer={exchange.answer} onViewWhy={onViewWhy} />
             </div>
           ) : (
             <Thinking />
@@ -693,7 +706,7 @@ function FollowUps({
 
 /* ---------- page ---------- */
 
-export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
+export function AskPage({ desktop, onViewFullMap, onViewWhy }: AskPageProps) {
   const [text, setText] = useState("");
   const [exchange, setExchange] = useState<Exchange | null>(null);
   const [thinking, setThinking] = useState(false);
@@ -749,6 +762,12 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
     try {
       const answer = await askHaqi({ question });
       if (requestId.current !== id) return;
+      if (answer.provenance.live && answer.ledgerId) {
+        window.localStorage.setItem("haqi:last-live-ledger", answer.ledgerId);
+      } else {
+        window.localStorage.removeItem("haqi:last-live-ledger");
+      }
+      window.dispatchEvent(new Event("haqi:live-ledger"));
       setExchange({ question, answer });
     } catch {
       if (requestId.current !== id) return;
@@ -859,6 +878,7 @@ export function AskPage({ desktop, onViewFullMap }: AskPageProps) {
               desktop={desktop}
               wide={desktop && !composerOpen}
               onNewQuestion={startNewQuestion}
+              onViewWhy={onViewWhy}
               scrollRef={answerScrollRef}
             />
           </div>

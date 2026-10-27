@@ -27,6 +27,22 @@ from app.schemas import Evidence, SourceType
 ENV_REQUIRED = ["ZETARIS_REST_URL", "ZETARIS_API_KEY"]
 _SQL_LIMIT = 50
 
+# ASCII-safe unit spellings emitted by the sponsor recipe (the view writes
+# ugm3 instead of µg/m³). Recognised aliases canonicalize to the trust
+# layer's KNOWN_UNITS; anything else passes through unchanged and gets
+# rejected loudly by consensus — invented units are never silently mapped.
+UNIT_ALIASES = {
+    "ugm3": "µg/m³",
+    "ug/m3": "µg/m³",
+    "µg/m3": "µg/m³",
+    "ug/m³": "µg/m³",
+    "aqi": "aqi",
+}
+
+
+def _norm_unit(unit: str) -> str:
+    return UNIT_ALIASES.get(str(unit).strip().lower(), str(unit))
+
 
 def configured() -> bool:
     return all(os.getenv(v) for v in ENV_REQUIRED)
@@ -66,6 +82,7 @@ class ZetarisAdapter(BaseAdapter):
             try:
                 sid, val, unit, dist, observed = row[:5]
                 val = float(val)
+                unit = _norm_unit(unit)
                 observed_dt = (
                     datetime.fromisoformat(str(observed).replace("Z", "+00:00"))
                     if isinstance(observed, str) else now

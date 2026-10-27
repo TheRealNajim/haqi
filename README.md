@@ -12,11 +12,11 @@ Built for [Open Agent Hackathon 2026](https://hackathon.genai.works/event/open-a
 
 | What is real | What is pending |
 |---|---|
-| Live API on Render: `/today`, `/ask`, `/why/{id}`, `/sources/status`, `/proof`, `/api/proof`, `/health` | Demo video (pending — will be linked here once it exists) |
-| 5 evidence sources live: OpenAQ, WAQI, OpenWeather, NASA FIRMS, Zetaris sponsor view | Demo video in production with the UI lead |
-| Trust ledger: every verdict has a receipt; `/why/{id}` renders the graph | Bright Data advisory slot awaits its key (honest `false` until then) |
-| NVIDIA Nemotron parse lane (live) | Pollen is `false` by design: CAMS data is Europe-only, the pilot city Lagos is not |
-| Meterless Nightshift narration lane: code shipped and tested; the slot reports `configured:false` until the Nightshift host is up (weights download was paused; demo-day plan re-arms it) | Frontend API wiring in progress by the UI lead (fixtures currently) |
+| Live API on Render: `/today`, `/ask`, `/why/{id}`, `/sources/status`, `/proof`, `/api/proof`, `/health` | Zetaris and Meterless run on dedicated hardware hosts; if a tunnel restarts, one env PUT + one deploy re-arms the lane |
+| 5 evidence sources live: OpenAQ, WAQI, OpenWeather, NASA FIRMS, Zetaris sponsor view | Bright Data advisory slot awaits its key (honest `false` until then) |
+| Trust ledger: every verdict has a receipt; `/why/{id}` renders the graph | Pollen is `false` by design: CAMS data is Europe-only, the pilot city Lagos is not |
+| NVIDIA Nemotron parse lane (live) | [Demo video (`haqi-demo-video-final.mp4`)](https://drive.google.com/drive/folders/1FVvTERM0v6ulU5rTnbBIbw6Fn2TZcC83) |
+| Meterless Nightshift narration lane live: `/why/{id}` returns a ledger-only story (`story_by` shows the model) | Frontend live at haqi-one.vercel.app — wired to the API, not fixtures |
 
 ## Why build this
 

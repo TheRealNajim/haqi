@@ -376,6 +376,39 @@ cannot be done from the repo):
 4. Confirm `GET /sources/status` shows `ZetarisAdapter` and `MeterlessNarration` both
    `configured: false`, and `GET /today` carries no `zetaris` entry in `blind_spots`.
 
+#### Decision update (27 Oct): hybrid is locked for judging — the block above is the no-laptop path
+
+The human leads locked the demo plan on 27 Oct: **the judging demo serves Zetaris through the
+quick tunnel, and Meterless values go live once a completion answers.** Everything above stays on
+the page unchanged, because on judge day, if the laptop is closed, this exact Render-only state is
+what the deployed API falls back to — it is the honest inspection path, not a cancelled plan.
+
+What changed on 27 Oct, in order:
+
+- The Zetaris tunnel is **live again** and verified end to end: `SELECT 1` → `1` through the fresh
+  public hostname (get it with `tunnel.ps1` — quick-tunnel hostnames change on every restart and do
+  not belong in git). The `haqi-zetaris-tunnel` autostart task is re-registered.
+- The Meterless weight download resumed: the 770 MB `Llama-3.2-1B-Instruct-Q4_K_M` GGUF, restarted
+  after the earlier copy was cancelled at 198 MB. It arms only after one `200` completion — a lane
+  that answers 503 must never carry a dashboard value.
+- The dashboard overwrite is exact and one-line for the Render owner: replace `ZETARIS_REST_URL`
+  with the new hostname + `/api/v1.0`. `ZETARIS_ORG_ID=1` and the stored key were already set there
+  when the slot read `configured: true` — they need no re-paste.
+
+Factual note, settled with timestamps, because a team message repeated it differently: the
+deployed API has read `zetaris unreachable: [Errno -2] Name or service not known` from its *first*
+`blind_spots` inspection (26 Oct 20:08) through the tunnel stop and until now. That is a DNS
+failure on the stored name, and a stopped quick tunnel does not produce it — its hostname keeps
+resolving and answers `530` from the edge (verified 26 Oct on the previous hostname). So the deploy
+built after `2f2ec83` never served Zetaris evidence from the name in the dashboard, and stopping
+the tunnel did not remove evidence that was being served. 27 Oct is the **first** live Zetaris
+wiring of that deploy — a new arm, not a restoration. If a check tomorrow shows any other error
+shape, the facts here change and the note gets updated, not rewritten.
+
+`sources_armed` on `/proof` counts *configured* slots, so once the paste lands it reads `4/7`
+while Zetaris genuinely serves — read that number next to the `/today` evidence rows, not instead
+of them.
+
 #### The Zetaris tunnel (local proof only — not armed in the demo)
 
 `cloudflared` puts a public https URL in front of the loopback REST port. It was built, rehearsed
@@ -800,4 +833,7 @@ redeploying, and every other check stays green on its own.
 | 26 Oct | **Decision: the demo is Render-only.** `/today` served by OpenAQ + OpenWeather + FIRMS; Zetaris and Meterless unset in Render and disclosed as blinds; no PC on the request path | done |
 | 26 Oct | Zetaris tunnel stopped (`-Stop`), `haqi-zetaris-tunnel` scheduled task removed, AC lid-close restored to sleep; old hostname now `530`, Zetaris still healthy on loopback | done |
 | 26 Oct | Post-shutdown gate: `healthcheck.ps1` 14/14 PASS (docker, REST `SELECT 1`, recipe `20.7 ugm3 @ 0.0 h`, Nemotron reply), recipe checker PASS over loopback | PASS |
-| 26 Oct | Cloud-only rehearsal, no PC involved: `POST /ask` "bike at 5pm" → Nemotron parse OK (~10 s warm), verdict `be careful` with `window: at 5pm` (3 h horizon honored, openweather honestly absent), `/why/ledger-9fff8acf` renders with nodes and edges | PASS — one open item: the dead `ZETARIS_REST_URL` row still prints `unreachable` into `blind_spots` |
+| 26 Oct | Cloud-only rehearsal, no PC involved: `POST /ask` "bike at 5pm" → Nemotron parse OK (~10 s warm), verdict `be careful` with `window: at 5pm` (3 h horizon honored, openweather honestly absent), `/why/ledger-9fff8acf` renders with nodes and edges | PASS — one open item at the time: the dead `ZETARIS_REST_URL` row still printed `unreachable` into `blind_spots` |
+| 27 Oct | Decision update: hybrid locked for judging (§4 update). Zetaris tunnel live again, `SELECT 1` verified through a fresh hostname; `haqi-zetaris-tunnel` autostart re-registered; Render owner needs the one-line `ZETARIS_REST_URL` overwrite | done — waiting on the paste, the stored key/org rows stay as-is |
+| 27 Oct | Meterless weights restarted: the 770 MB `Llama-3.2-1B-Instruct-Q4_K_M` GGUF from Hugging Face resumes the copy cancelled yesterday at 198 MB; an arm is only valid after one `200` completion | in progress |
+| 27 Oct | Record corrected with timestamps: deployed API read `Name or service not known` from the first `blind_spots` inspection (26 Oct 20:08) through now; a *stopped* quick tunnel resolves and answers `530` (26 Oct, old hostname), so the 26 Oct stop did not remove Zetaris evidence from a deploy that was serving it | recorded, §4 |

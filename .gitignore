@@ -33,3 +33,4 @@ node_modules/
 dist/
 
 .freebuff
+.DS_Store

@@ -10,9 +10,7 @@ CLAUDE.md
 SPEC.md
 DECISIONS.md
 QWEN_BRIEF.md
-# area AGENTS.md files ARE tracked so teammates' agents load the rules
-!frontend/AGENTS.md
-!infra/AGENTS.md
+# area AGENTS.md files stay local too (agent-only rule)
 
 # python
 __pycache__/
@@ -33,3 +31,4 @@ node_modules/
 dist/
 
 .freebuff
+.DS_Store

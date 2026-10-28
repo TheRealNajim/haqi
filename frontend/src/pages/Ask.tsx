@@ -130,34 +130,64 @@ function CapabilityCard({ id, desktop, onPrompt }: CapabilityCardProps) {
 
   return (
     <article
-      className={`flex flex-col rounded-[18px] border border-border bg-surface px-5 py-7 shadow-[var(--shadow-soft)] ${
-        desktop ? "h-full" : "w-full max-w-[520px] justify-self-center"
+      className={`flex flex-col rounded-[18px] border border-border bg-surface shadow-[var(--shadow-soft)] ${
+        desktop ? "h-full px-5 py-7" : "w-[85%] shrink-0 snap-start px-4 py-5"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-canvas text-ink">
-          <Icon className="size-5" strokeWidth={1.6} />
+      <div className={`flex items-start ${desktop ? "gap-3" : "gap-2.5"}`}>
+        <span
+          className={`flex shrink-0 items-center justify-center bg-canvas text-ink ${
+            desktop ? "size-11 rounded-[12px]" : "size-9 rounded-[10px]"
+          }`}
+        >
+          <Icon className={desktop ? "size-5" : "size-4"} strokeWidth={1.6} />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-[25px] leading-[1.25] text-ink">{capability.title}</h2>
-          <p className="mt-1.5 text-[16px] leading-[1.55] text-ink-soft">
+          <h2
+            className={
+              desktop
+                ? "text-[25px] leading-[1.25] text-ink"
+                : "text-[21px] leading-[1.25] text-ink"
+            }
+          >
+            {capability.title}
+          </h2>
+          <p
+            className={
+              desktop
+                ? "mt-1.5 text-[16px] leading-[1.55] text-ink-soft"
+                : "mt-1 text-[14px] leading-[1.5] text-ink-soft"
+            }
+          >
             {capability.description}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 border-t border-border pt-3">
-        <p className="text-[12px] uppercase tracking-[0.1em] text-ink-faint">Try asking</p>
-        <ul className="mt-2 space-y-1">
+      <div className={`border-t border-border ${desktop ? "mt-4 pt-3" : "mt-3.5 pt-2.5"}`}>
+        <p
+          className={`uppercase tracking-[0.1em] text-ink-faint ${
+            desktop ? "text-[12px]" : "text-[10px]"
+          }`}
+        >
+          Try asking
+        </p>
+        <ul className={`space-y-1 ${desktop ? "mt-2" : "mt-1.5"}`}>
           {capability.prompts.map((prompt) => (
             <li key={prompt}>
               <button
                 type="button"
                 onClick={() => onPrompt(prompt)}
-                className="group flex min-h-10 w-full items-start gap-2 rounded-[8px] px-2 py-2.5 text-left text-[15px] leading-[1.5] text-ink-soft transition-colors hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+                className={`group flex w-full items-start rounded-[8px] text-left text-ink-soft transition-colors hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 ${
+                  desktop
+                    ? "min-h-10 gap-2 px-2 py-2.5 text-[15px] leading-[1.5]"
+                    : "min-h-8 gap-1.5 px-1.5 py-1.5 text-[13px] leading-[1.45]"
+                }`}
               >
                 <CornerDownLeft
-                  className="mt-0.5 size-4 shrink-0 text-ink-faint group-hover:text-ink"
+                  className={`mt-0.5 shrink-0 text-ink-faint group-hover:text-ink ${
+                    desktop ? "size-4" : "size-3.5"
+                  }`}
                   strokeWidth={1.6}
                 />
                 <span>{prompt}</span>
@@ -226,11 +256,11 @@ function Composer({
         event.preventDefault();
         if (canSend) onSubmit();
       }}
-      className={`flex items-stretch gap-3 ${desktop ? "h-full" : "h-[200px]"}`}
+      className={`flex gap-3 ${desktop ? "h-full items-stretch" : "flex-col gap-2"}`}
     >
       <div
-        className={`flex h-full min-w-0 flex-1 flex-col rounded-[18px] border border-border bg-surface shadow-[var(--shadow-soft)] ${
-          desktop ? "p-5" : "p-4"
+        className={`flex min-w-0 flex-col rounded-[18px] border border-border bg-surface shadow-[var(--shadow-soft)] ${
+          desktop ? "h-full flex-1 p-5" : "h-[169px] w-full p-4"
         }`}
       >
         {label && (
@@ -272,18 +302,26 @@ function Composer({
         </div>
       </div>
 
-      <div className="grid shrink-0 grid-rows-4 gap-2">
+      <div
+        className={
+          desktop
+            ? "grid shrink-0 grid-rows-4 gap-2"
+            : "relative flex w-full shrink-0 items-center justify-start gap-2"
+        }
+      >
         <button
           type="button"
           onClick={() => toast("Attachments aren't supported in this demo yet.")}
           title="Attach a file"
           aria-label="Attach a file"
-          className="flex aspect-square min-h-0 items-center justify-center rounded-[10px] bg-surface text-ink transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+          className={`flex items-center justify-center rounded-[10px] bg-surface text-ink transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            desktop ? "aspect-square min-h-0" : "size-10 shrink-0"
+          }`}
         >
           <Paperclip className="size-[38%]" strokeWidth={1.6} />
         </button>
 
-        <div className="relative flex aspect-square min-h-0">
+        <div className={desktop ? "relative flex aspect-square min-h-0" : "flex"}>
           <button
             type="button"
             onClick={() => setContextOpen((open) => !open)}
@@ -291,7 +329,9 @@ function Composer({
             aria-label="Add context"
             aria-haspopup="menu"
             aria-expanded={contextOpen}
-            className="flex h-full w-full items-center justify-center rounded-[10px] bg-surface text-ink transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+            className={`flex items-center justify-center rounded-[10px] bg-surface text-ink transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+              desktop ? "h-full w-full" : "size-10 shrink-0"
+            }`}
           >
             <CirclePlus className="size-[38%]" strokeWidth={1.6} />
           </button>
@@ -306,7 +346,9 @@ function Composer({
               <div
                 role="menu"
                 aria-label="Add context"
-                className="absolute right-full top-0 z-50 mr-2 w-60 rounded-[12px] bg-surface p-2 shadow-[var(--shadow-soft)]"
+                className={`absolute z-50 w-60 rounded-[12px] bg-surface p-2 shadow-[var(--shadow-soft)] ${
+                  desktop ? "right-full top-0 mr-2" : "bottom-full left-0 mb-2"
+                }`}
               >
                 <p className="px-2 py-1 text-[10px] uppercase tracking-[0.1em] text-ink-faint">
                   Add context
@@ -347,9 +389,9 @@ function Composer({
               : "Voice input unavailable in this browser"
           }
           aria-pressed={listening}
-          className={`relative flex aspect-square min-h-0 items-center justify-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-            listening ? "bg-risk-red text-surface" : "bg-surface text-ink hover:bg-canvas"
-          }`}
+          className={`relative flex items-center justify-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            desktop ? "aspect-square min-h-0" : "size-10 shrink-0"
+          } ${listening ? "bg-risk-red text-surface" : "bg-surface text-ink hover:bg-canvas"}`}
         >
           {listening && (
             <span
@@ -368,7 +410,9 @@ function Composer({
           type="submit"
           disabled={!canSend}
           aria-label={thinking ? "HAQI is thinking" : "Send question"}
-          className={`flex aspect-square min-h-0 items-center justify-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+          className={`flex items-center justify-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            desktop ? "aspect-square min-h-0" : "size-10 shrink-0"
+          } ${
             canSend
               ? "bg-surface text-ink hover:bg-canvas"
               : "cursor-not-allowed bg-surface text-ink-faint/50"
@@ -846,29 +890,31 @@ export function AskPage({ desktop, onViewFullMap, onViewWhy }: AskPageProps) {
         </div>
       )}
 
-      <div
-        style={desktop ? pos(true, CONTENT_X, 137, 1040, 96) : undefined}
-        className={desktop ? "" : "mt-6 pr-[164px]"}
-      >
-        <h1
-          className={`font-display leading-[1.2] tracking-[-0.01em] text-ink ${
-            desktop ? "text-[42px]" : "text-[38px]"
+      <div className={desktop ? "contents" : "mt-6 flex items-center justify-between gap-3"}>
+        <div
+          style={desktop ? pos(true, CONTENT_X, 137, 1040, 96) : undefined}
+          className={desktop ? "" : "min-w-0"}
+        >
+          <h1
+            className={`font-display leading-[1.2] tracking-[-0.01em] text-black ${
+              desktop ? "text-[42px]" : "text-[30px]"
+            }`}
+          >
+            Ask HAQI
+          </h1>
+        </div>
+
+        <button
+          type="button"
+          onClick={onViewFullMap}
+          style={desktop ? pos(true, 1729, 141, 160, 48) : undefined}
+          className={`flex shrink-0 items-center justify-center gap-2 rounded-[10px] bg-ink text-surface transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            desktop ? "text-[16px]" : "h-8 px-3 text-[12px]"
           }`}
         >
-          Ask HAQI
-        </h1>
+          View Full Map <Eye className={desktop ? "size-5" : "size-4"} strokeWidth={1.6} />
+        </button>
       </div>
-
-      <button
-        type="button"
-        onClick={onViewFullMap}
-        style={desktop ? pos(true, 1729, 141, 160, 48) : undefined}
-        className={`flex shrink-0 items-center justify-center gap-2 rounded-[10px] bg-ink text-[16px] text-surface transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-          desktop ? "" : "absolute right-0 top-6 h-10 px-3 text-[13px]"
-        }`}
-      >
-        View Full Map <Eye className="size-5" strokeWidth={1.6} />
-      </button>
 
       {exchange ? (
         <>
@@ -901,7 +947,9 @@ export function AskPage({ desktop, onViewFullMap, onViewWhy }: AskPageProps) {
           <div
             style={desktop ? autoPos(true, CONTENT_X, CARD_TOP, CONTENT_W, 560) : undefined}
             className={
-              desktop ? "grid grid-cols-4 gap-6" : "mt-6 grid gap-4 min-[700px]:grid-cols-2"
+              desktop
+                ? "grid grid-cols-4 gap-6"
+                : "mt-6 -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain scroll-px-6 px-6 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             }
           >
             {CAPABILITIES.map((item) => (

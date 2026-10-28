@@ -118,21 +118,23 @@ export function WhyPage({ desktop, onViewFullMap }: WhyPageProps) {
         return;
       }
       setMessage("Loading live evidence…");
-      void fetchWhy(ledgerId).then((result) => {
-        if (!active) return;
-        if (result.ledger_id !== ledgerId || "note" in result) {
+      void fetchWhy(ledgerId)
+        .then((result) => {
+          if (!active) return;
+          if (result.ledger_id !== ledgerId || "note" in result) {
+            setGraph(null);
+            setMessage("That receipt is unavailable. Ask another question to create a new one.");
+            return;
+          }
+          setGraph(result);
+          setSelectedId("verdict");
+          setMessage("");
+        })
+        .catch(() => {
+          if (!active) return;
           setGraph(null);
-          setMessage("That receipt is unavailable. Ask another question to create a new one.");
-          return;
-        }
-        setGraph(result);
-        setSelectedId("verdict");
-        setMessage("");
-      }).catch(() => {
-        if (!active) return;
-        setGraph(null);
-        setMessage("Could not load the live evidence chain. Try asking again.");
-      });
+          setMessage("Could not load the live evidence chain. Try asking again.");
+        });
     };
     load();
     window.addEventListener("haqi:live-ledger", load);
@@ -152,7 +154,8 @@ export function WhyPage({ desktop, onViewFullMap }: WhyPageProps) {
   const decision = graph?.decision ?? { level: "", window: "", reason: "", aqi: null };
   const blindSpots = graph?.blind_spots ?? [];
   const selected = nodes.find((node) => node.id === selectedId) ?? nodes[0];
-  const edgeFor = (node: WhyNode) => edges.find((edge) => edge.from === node.id && edge.to === "verdict");
+  const edgeFor = (node: WhyNode) =>
+    edges.find((edge) => edge.from === node.id && edge.to === "verdict");
   const decisionTone = levelTone(decision.level);
 
   return (
@@ -339,7 +342,11 @@ export function WhyPage({ desktop, onViewFullMap }: WhyPageProps) {
       >
         <p className="text-[10px] uppercase tracking-[0.1em] text-ink-faint">Node detail</p>
         <div className="mt-2">
-          {selected ? <NodeDetail node={selected} /> : <p className="text-[13px] text-ink-faint">{message}</p>}
+          {selected ? (
+            <NodeDetail node={selected} />
+          ) : (
+            <p className="text-[13px] text-ink-faint">{message}</p>
+          )}
         </div>
       </section>
 
@@ -369,7 +376,11 @@ export function WhyPage({ desktop, onViewFullMap }: WhyPageProps) {
         <span className="inline-flex max-w-full items-start gap-2 rounded-[10px] border border-border bg-surface px-3 py-2">
           <Info className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.6} />
           <span>
-            {graph ? <>Logged from {graph.ledger_id} on {new Date(graph.logged_at).toLocaleString()}. </> : null}
+            {graph ? (
+              <>
+                Logged from {graph.ledger_id} on {new Date(graph.logged_at).toLocaleString()}.{" "}
+              </>
+            ) : null}
             Node size shows weight; stale evidence is dashed and down-weighted.
           </span>
         </span>

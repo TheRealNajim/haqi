@@ -90,12 +90,12 @@ const AQI_BANDS = [
   { share: 150, className: "bg-risk-red" },
 ];
 
-function AqiScale({ aqi }: { aqi: number }) {
+function AqiScale({ aqi, desktop }: { aqi: number; desktop: boolean }) {
   const marker = Math.min(100, Math.max(0, (aqi / 300) * 100));
   return (
     <div>
       <div className="relative">
-        <div className="flex h-3 overflow-hidden rounded-full">
+        <div className={`flex overflow-hidden rounded-full ${desktop ? "h-3" : "h-2"}`}>
           {AQI_BANDS.map((band, index) => (
             <span
               key={index}
@@ -106,11 +106,17 @@ function AqiScale({ aqi }: { aqi: number }) {
         </div>
         <span
           aria-hidden="true"
-          className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-surface bg-ink shadow-[var(--shadow-soft)]"
+          className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink shadow-[var(--shadow-soft)] ${
+            desktop ? "size-5 border-[3px]" : "size-3.5 border-2"
+          } border-surface`}
           style={{ left: `${marker}%` }}
         />
       </div>
-      <div className="mt-2 flex justify-between text-[12px] text-ink-faint">
+      <div
+        className={`mt-2 flex justify-between text-ink-faint ${
+          desktop ? "text-[12px]" : "text-[9px]"
+        }`}
+      >
         <span>0</span>
         <span>US AQI scale · live</span>
         <span>300+</span>
@@ -119,13 +125,25 @@ function AqiScale({ aqi }: { aqi: number }) {
   );
 }
 
-function StatTile({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
+function StatTile({
+  desktop,
+  icon,
+  value,
+  label,
+}: {
+  desktop: boolean;
+  icon: ReactNode;
+  value: string;
+  label: string;
+}) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-[19px] text-ink">
+      <div
+        className={`flex items-center gap-1.5 text-ink ${desktop ? "text-[19px]" : "text-[15px]"}`}
+      >
         {icon} {value}
       </div>
-      <div className="text-[12px] text-ink-faint">{label}</div>
+      <div className={`text-ink-faint ${desktop ? "text-[12px]" : "text-[9px]"}`}>{label}</div>
     </div>
   );
 }
@@ -173,6 +191,8 @@ export function TodayPage({
 }: TodayPageProps) {
   const pos = (l: number, t: number, w: number, h: number) => canvasPosition(desktop, l, t, w, h);
   const lifted = (base: number, limit = Infinity) => base - Math.min(lift, limit);
+  /** Mobile cards are drawn at 85% of the desktop type/padding scale. */
+  const s = (desktopClass: string, mobileClass: string) => (desktop ? desktopClass : mobileClass);
 
   const [panelOpen, setPanelOpen] = useState(true);
   const [sortDesc, setSortDesc] = useState(true);
@@ -291,7 +311,8 @@ export function TodayPage({
 
   const aqi = verdict?.aqi ?? null;
   const level = verdict?.level ?? "";
-  const areaLabel = area && country ? `${area}, ${country}` : country || region || place?.label || "Your area";
+  const areaLabel =
+    area && country ? `${area}, ${country}` : country || region || place?.label || "Your area";
   const areaNote =
     placeNote ??
     (place?.source === "ip"
@@ -308,347 +329,541 @@ export function TodayPage({
     <>
       {/* Title */}
       <div style={pos(119, 120, 700, 90)} className={desktop ? "" : "mt-6"}>
-        <h1 className="font-display text-[42px] leading-[1.25] tracking-[-0.01em] text-ink">
+        <h1
+          className={`font-display leading-[1.25] tracking-[-0.01em] text-black ${
+            desktop ? "text-[42px]" : "text-[30px]"
+          }`}
+        >
           World Risk Map
         </h1>
-        <p className="mt-1 text-[18px] text-ink-soft">
+        <p className={`mt-1 text-black ${desktop ? "text-[18px]" : "text-[15px]"}`}>
           Live air quality for the place you are looking at.
         </p>
       </div>
-      <button
-        onClick={share}
-        style={pos(1592, 129, 116, 48)}
-        className={`flex items-center justify-center gap-2 rounded-[10px] bg-surface text-[18px] text-ink ${desktop ? "" : "h-10 px-5"}`}
-      >
-        Share <Share2 className="size-4" strokeWidth={1.6} />
-      </button>
-      <button
-        onClick={onViewFullMap}
-        style={pos(1729, 129, 160, 48)}
-        className={`flex items-center justify-center gap-2 rounded-[10px] bg-ink text-[18px] text-surface ${desktop ? "" : "h-10 px-5"}`}
-      >
-        View Full Map <Eye className="size-5" strokeWidth={1.6} />
-      </button>
-
-      {/* Area panel */}
-      {panelOpen && (
-        <div
-          style={pos(1365, lifted(365, 165), 445, 443)}
-          className={desktop ? "" : "relative mt-8 h-[560px]"}
+      <div className={desktop ? "contents" : "mt-4 flex items-center gap-2"}>
+        <button
+          onClick={share}
+          style={pos(1592, 129, 116, 48)}
+          className={`flex items-center justify-center gap-2 rounded-[10px] bg-surface text-ink ${
+            desktop ? "text-[18px]" : "h-9 whitespace-nowrap px-4 text-[14px]"
+          }`}
         >
-          <button
-            onClick={() => setPanelOpen(false)}
-            aria-label="Close"
-            className="absolute left-1/2 top-0 z-10 flex size-[72px] -translate-x-[15%] items-center justify-center rounded-full bg-surface text-ink shadow-[var(--shadow-soft)] ring-8 ring-canvas/70"
+          Share <Share2 className="size-4" strokeWidth={1.6} />
+        </button>
+        <button
+          onClick={onViewFullMap}
+          style={pos(1729, 129, 160, 48)}
+          className={`flex items-center justify-center gap-2 rounded-[10px] bg-ink text-surface ${
+            desktop ? "text-[18px]" : "h-9 whitespace-nowrap px-4 text-[14px]"
+          }`}
+        >
+          View Full Map
+          <Eye className={desktop ? "size-5" : "size-4"} strokeWidth={1.6} />
+        </button>
+      </div>
+
+      {/* Cards sit a touch further from the screen edges on mobile. */}
+      <div className={desktop ? "contents" : "px-2"}>
+        {/* Area panel */}
+        {panelOpen && (
+          <div
+            style={pos(1365, lifted(365, 165), 445, 443)}
+            className={desktop ? "" : "relative mt-6 h-[440px]"}
           >
-            <X className="size-7" strokeWidth={1.8} />
-          </button>
-          <Card className="absolute inset-x-0 bottom-0 top-[40px] overflow-hidden bg-surface/90 backdrop-blur">
-            <div className="px-[21px] pt-[52px]">
-              <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-[26px] tracking-[-0.01em] text-ink">
-                    {areaLabel}
-                  </h3>
-                  <p className="mt-0.5 text-[12px] text-ink-faint">
-                    {areaNote}
-                  </p>
+            <button
+              onClick={() => setPanelOpen(false)}
+              aria-label="Close"
+              className={`absolute left-1/2 top-0 z-10 flex -translate-x-[15%] items-center justify-center rounded-full bg-surface text-ink shadow-[var(--shadow-soft)] ring-canvas/70 ${s(
+                "size-[72px] ring-8",
+                "size-[54px] ring-[5px]",
+              )}`}
+            >
+              <X className={s("size-7", "size-5")} strokeWidth={1.8} />
+            </button>
+            <Card
+              className={`absolute inset-x-0 bottom-0 overflow-hidden bg-surface/90 backdrop-blur ${s(
+                "top-[40px]",
+                "top-[30px]",
+              )}`}
+            >
+              <div className={s("px-[21px] pt-[52px]", "px-4 pt-[38px]")}>
+                <div className="flex items-start justify-between gap-3 border-b border-border pb-3">
+                  <div className="min-w-0">
+                    <h3
+                      className={`truncate tracking-[-0.01em] text-ink ${s(
+                        "text-[26px]",
+                        "text-[20px]",
+                      )}`}
+                    >
+                      {areaLabel}
+                    </h3>
+                    <p className={`mt-0.5 text-ink-faint ${s("text-[12px]", "text-[9px]")}`}>
+                      {areaNote}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className={`text-ink-faint ${s("text-[15px]", "text-[12px]")}`}>
+                      Current AQI
+                    </div>
+                    <div
+                      className={`${s("text-[26px]", "text-[20px]")} ${
+                        aqi === null ? "text-ink-faint" : "text-risk-red"
+                      }`}
+                    >
+                      {aqi === null ? "—" : Math.round(aqi)}
+                      <span className={`text-ink-faint ${s("text-[19px]", "text-[14px]")}`}>
+                        /300
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[15px] text-ink-faint">Current AQI</div>
+                <div className={`grid grid-cols-3 ${s("mt-5 text-[15px]", "mt-3.5 text-[12px]")}`}>
+                  <div>
+                    <div className="flex items-center gap-2 text-ink">
+                      <span
+                        className={`${s(
+                          "size-2 ring-4",
+                          "size-1.5 ring-[3px]",
+                        )} rounded-full ${LEVEL_DOT[level] ?? "bg-ink-faint ring-canvas"}`}
+                      />{" "}
+                      {level || "No reading"}
+                    </div>
+                    <div className="mt-1.5 text-ink-faint">Right now</div>
+                  </div>
+                  <div className={`border-l border-border ${s("pl-5", "pl-3.5")}`}>
+                    <div className="flex items-center gap-2 text-ink">
+                      <span
+                        className={`${s(
+                          "size-2 ring-4",
+                          "size-1.5 ring-[3px]",
+                        )} rounded-full bg-risk-teal ring-canvas`}
+                      />{" "}
+                      Primary signal
+                    </div>
+                    <div className="mt-1.5 text-ink-faint">
+                      {strongest ? sourceName(strongest.source_id) : "No source"}
+                    </div>
+                  </div>
+                  <div className={`border-l border-border ${s("pl-5", "pl-3.5")}`}>
+                    <div className="flex items-center gap-2 text-ink">
+                      <RefreshCw className="size-4 text-risk-green" /> {fresh} of {evidence.length}{" "}
+                      fresh
+                    </div>
+                    <div className="mt-1.5 text-ink-faint">
+                      Checked {reading ? clockTime(reading.fetchedAt) : "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                className={`absolute bottom-0 left-0 w-full overflow-hidden ${s(
+                  "h-[230px]",
+                  "h-[184px]",
+                )}`}
+              >
+                <WorldMap
+                  selected={miniMapSelection}
+                  onSelect={() => undefined}
+                  overlay={false}
+                  focusZoom={1.6}
+                  className="pointer-events-none scale-[1.2]"
+                />
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Air Quality in Your Area */}
+        <div
+          style={pos(120, lifted(795), 758, 495)}
+          className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6 overflow-x-auto"}`}
+        >
+          <div className={`flex items-start justify-between gap-3 ${s("px-5 pt-5", "px-4 pt-4")}`}>
+            <h3 className={`tracking-[-0.01em] text-ink ${s("text-[21px]", "text-[17px]")}`}>
+              Air Quality in Your Area
+            </h3>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={onUseMyLocation}
+                className={`flex items-center gap-1.5 rounded-full border border-border text-ink transition-colors hover:border-ink/25 hover:bg-canvas ${s(
+                  "px-2.5 py-1 text-[11px]",
+                  "px-2 py-0.5 text-[10px]",
+                )}`}
+              >
+                <MapPin className={s("size-3", "size-2.5")} strokeWidth={1.9} />
+                Use my location
+              </button>
+              <button
+                onClick={() => setPanelOpen(true)}
+                aria-label="Open air quality detail"
+                className={`flex items-center justify-center rounded-full border border-border text-ink ${s(
+                  "size-[50px]",
+                  "size-[40px]",
+                )}`}
+              >
+                <ArrowUpRight className={s("size-5", "size-4")} strokeWidth={1.6} />
+              </button>
+            </div>
+          </div>
+
+          {placeStatus === "empty" ? (
+            <div className={s("mt-8 px-5", "mt-6 px-4")}>
+              <p
+                className={`max-w-[520px] leading-[1.55] text-ink-soft ${s(
+                  "text-[16px]",
+                  "text-[13px]",
+                )}`}
+              >
+                A whole region has no single air reading. Pick a country above and HAQI will load
+                live numbers for it.
+              </p>
+            </div>
+          ) : status === "loading" || status === "idle" ? (
+            <div aria-busy="true" className={s("mt-6 px-5", "mt-5 px-4")}>
+              <span className="sr-only">Loading the air-quality reading</span>
+              <div className={`animate-pulse rounded bg-canvas ${s("h-5 w-40", "h-4 w-32")}`} />
+              <div
+                className={`mt-3 animate-pulse rounded bg-canvas ${s("h-12 w-32", "h-10 w-28")}`}
+              />
+              <div className={`mt-6 h-3 w-full animate-pulse rounded bg-canvas`} />
+            </div>
+          ) : status === "error" || !verdict ? (
+            <div className={s("mt-8 px-5", "mt-6 px-4")}>
+              <p
+                className={`max-w-[520px] leading-[1.55] text-ink-soft ${s(
+                  "text-[16px]",
+                  "text-[13px]",
+                )}`}
+              >
+                {error ?? "HAQI could not load this reading."}
+              </p>
+              <button
+                onClick={retry}
+                className={`mt-4 inline-flex items-center gap-2 rounded-[10px] border border-border text-ink hover:bg-canvas ${s(
+                  "px-3 py-2 text-[13px]",
+                  "px-2.5 py-1.5 text-[11px]",
+                )}`}
+              >
+                <RefreshCw className={s("size-3.5", "size-3")} strokeWidth={1.8} /> Try again
+              </button>
+            </div>
+          ) : (
+            <>
+              <div
+                className={`flex justify-between ${s("mt-[18px] gap-6 px-5", "mt-3 gap-3.5 px-4")}`}
+              >
+                <div>
+                  <div className={`text-ink-faint ${s("text-[21px]", "text-[16px]")}`}>
+                    Current AQI
+                  </div>
                   <div
-                    className={`text-[26px] ${aqi === null ? "text-ink-faint" : "text-risk-red"}`}
+                    className={`mt-1 tracking-[-0.02em] text-ink ${s("text-[44px]", "text-[32px]")}`}
                   >
                     {aqi === null ? "—" : Math.round(aqi)}
-                    <span className="text-[19px] text-ink-faint">/300</span>
+                    <span className={`text-ink-faint ${s("text-[19px]", "text-[14px]")}`}>
+                      /300
+                    </span>
                   </div>
-                </div>
-              </div>
-              <div className="mt-5 grid grid-cols-3 text-[15px]">
-                <div>
-                  <div className="flex items-center gap-2 text-ink">
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <span
-                      className={`size-2 rounded-full ring-4 ${LEVEL_DOT[level] ?? "bg-ink-faint ring-canvas"}`}
-                    />{" "}
-                    {level || "No reading"}
-                  </div>
-                  <div className="mt-1.5 text-ink-faint">Right now</div>
-                </div>
-                <div className="border-l border-border pl-5">
-                  <div className="flex items-center gap-2 text-ink">
-                    <span className="size-2 rounded-full bg-risk-teal ring-4 ring-canvas" /> Primary
-                    signal
-                  </div>
-                  <div className="mt-1.5 text-ink-faint">
-                    {strongest ? sourceName(strongest.source_id) : "No source"}
+                      className={`rounded-full ${s(
+                        "px-2.5 py-1 text-[12px]",
+                        "px-2 py-0.5 text-[10px]",
+                      )} ${LEVEL_CHIP[level] ?? "bg-canvas text-ink-soft"}`}
+                    >
+                      {level || "No reading"}
+                    </span>
+                    <span className={`text-ink-faint ${s("text-[12px]", "text-[10px]")}`}>
+                      {place?.label}
+                    </span>
                   </div>
                 </div>
-                <div className="border-l border-border pl-5">
-                  <div className="flex items-center gap-2 text-ink">
-                    <RefreshCw className="size-4 text-risk-green" /> {fresh} of {evidence.length}{" "}
-                    fresh
-                  </div>
-                  <div className="mt-1.5 text-ink-faint">
-                    Checked {reading ? clockTime(reading.fetchedAt) : "—"}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="absolute bottom-0 left-0 h-[230px] w-full overflow-hidden">
-              <WorldMap
-                selected={miniMapSelection}
-                onSelect={() => undefined}
-                overlay={false}
-                focusZoom={1.6}
-                className="pointer-events-none scale-[1.2]"
-              />
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Air Quality in Your Area */}
-      <div
-        style={pos(120, lifted(795), 758, 495)}
-        className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6 overflow-x-auto"}`}
-      >
-        <div className="flex items-start justify-between gap-3 px-5 pt-5">
-          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Air Quality in Your Area</h3>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              onClick={onUseMyLocation}
-              className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] text-ink transition-colors hover:border-ink/25 hover:bg-canvas"
-            >
-              <MapPin className="size-3" strokeWidth={1.9} />
-              Use my location
-            </button>
-            <button
-              onClick={() => setPanelOpen(true)}
-              aria-label="Open air quality detail"
-              className="flex size-[50px] items-center justify-center rounded-full border border-border text-ink"
-            >
-              <ArrowUpRight className="size-5" strokeWidth={1.6} />
-            </button>
-          </div>
-        </div>
-
-        {placeStatus === "empty" ? (
-          <div className="mt-8 px-5">
-            <p className="max-w-[520px] text-[16px] leading-[1.55] text-ink-soft">
-              A whole region has no single air reading. Pick a country above and HAQI will load live
-              numbers for it.
-            </p>
-          </div>
-        ) : status === "loading" || status === "idle" ? (
-          <div aria-busy="true" className="mt-6 px-5">
-            <span className="sr-only">Loading the air-quality reading</span>
-            <div className="h-5 w-40 animate-pulse rounded bg-canvas" />
-            <div className="mt-3 h-12 w-32 animate-pulse rounded bg-canvas" />
-            <div className="mt-6 h-3 w-full animate-pulse rounded bg-canvas" />
-          </div>
-        ) : status === "error" || !verdict ? (
-          <div className="mt-8 px-5">
-            <p className="max-w-[520px] text-[16px] leading-[1.55] text-ink-soft">
-              {error ?? "HAQI could not load this reading."}
-            </p>
-            <button
-              onClick={retry}
-              className="mt-4 inline-flex items-center gap-2 rounded-[10px] border border-border px-3 py-2 text-[13px] text-ink hover:bg-canvas"
-            >
-              <RefreshCw className="size-3.5" strokeWidth={1.8} /> Try again
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="mt-[18px] flex justify-between gap-6 px-5">
-              <div>
-                <div className="text-[21px] text-ink-faint">Current AQI</div>
-                <div className="mt-1 text-[44px] tracking-[-0.02em] text-ink">
-                  {aqi === null ? "—" : Math.round(aqi)}
-                  <span className="text-[19px] text-ink-faint">/300</span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[12px] ${LEVEL_CHIP[level] ?? "bg-canvas text-ink-soft"}`}
-                  >
-                    {level || "No reading"}
-                  </span>
-                  <span className="text-[12px] text-ink-faint">{place?.label}</span>
+                <div
+                  className={`grid grid-cols-2 pt-0 ${s(
+                    "mr-[-18px] gap-x-[38px] gap-y-[34px]",
+                    "mr-[-13px] gap-x-[26px] gap-y-[22px]",
+                  )}`}
+                >
+                  <StatTile
+                    desktop={desktop}
+                    icon={
+                      <Radio
+                        className={`${s("size-4", "size-3")} text-risk-teal`}
+                        strokeWidth={1.8}
+                      />
+                    }
+                    value={
+                      pm25
+                        ? `${short(pm25.raw_value)} ${pm25.unit}`
+                        : verdict.aqi !== null
+                          ? `AQI ${Math.round(verdict.aqi)}`
+                          : "—"
+                    }
+                    label={pm25 ? "PM2.5" : "AQI"}
+                  />
+                  <StatTile
+                    desktop={desktop}
+                    icon={
+                      <Wind
+                        className={`${s("size-4", "size-3")} text-risk-green`}
+                        strokeWidth={1.8}
+                      />
+                    }
+                    value={wind ? `${short(wind.raw_value)} ${wind.unit}` : "—"}
+                    label="Wind next 3h"
+                  />
+                  <StatTile
+                    desktop={desktop}
+                    icon={
+                      <Flame
+                        className={`${s("size-4", "size-3")} fill-risk-orange text-risk-orange`}
+                      />
+                    }
+                    value={fire ? short(fire.raw_value, 0) : "—"}
+                    label="Fire hotspots, 50 km"
+                  />
+                  <StatTile
+                    desktop={desktop}
+                    icon={
+                      <RefreshCw
+                        className={`${s("size-4", "size-3")} text-risk-green`}
+                        strokeWidth={1.8}
+                      />
+                    }
+                    value={`${fresh}/${evidence.length}`}
+                    label="Fresh sources"
+                  />
                 </div>
               </div>
-              <div className="mr-[-18px] grid grid-cols-2 gap-x-[38px] gap-y-[34px] pt-0">
-                <StatTile
-                  icon={<Radio className="size-4 text-risk-teal" strokeWidth={1.8} />}
-                  value={
-                    pm25
-                      ? `${short(pm25.raw_value)} ${pm25.unit}`
-                      : verdict.aqi !== null
-                        ? `AQI ${Math.round(verdict.aqi)}`
-                        : "—"
-                  }
-                  label={pm25 ? "PM2.5" : "AQI"}
-                />
-                <StatTile
-                  icon={<Wind className="size-4 text-risk-green" strokeWidth={1.8} />}
-                  value={wind ? `${short(wind.raw_value)} ${wind.unit}` : "—"}
-                  label="Wind next 3h"
-                />
-                <StatTile
-                  icon={<Flame className="size-4 fill-risk-orange text-risk-orange" />}
-                  value={fire ? short(fire.raw_value, 0) : "—"}
-                  label="Fire hotspots, 50 km"
-                />
-                <StatTile
-                  icon={<RefreshCw className="size-4 text-risk-green" strokeWidth={1.8} />}
-                  value={`${fresh}/${evidence.length}`}
-                  label="Fresh sources"
-                />
-              </div>
-            </div>
 
-            <div className="relative mx-5 mt-[18px] flex h-[300px] flex-col justify-center">
-              <AqiScale aqi={aqi ?? 0} />
-              <p className="mt-5 max-w-[640px] text-[18px] leading-[1.45] text-ink">
-                {verdict.reason}
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-faint">
-                <span>Checked {reading ? clockTime(reading.fetchedAt) : "just now"}</span>
-                <span>·</span>
-                <span>{reading?.demo ? "Demo data, not live" : "Live sources"}</span>
-                {aqi === null && <span>· No current AQI value for this place yet</span>}
-              </div>
+              <div
+                className={`relative flex flex-col justify-center ${s(
+                  "mx-5 mt-[18px] h-[300px]",
+                  "mx-4 mt-3 h-[232px]",
+                )}`}
+              >
+                <AqiScale aqi={aqi ?? 0} desktop={desktop} />
+                <p
+                  className={`max-w-[640px] leading-[1.45] text-ink ${s(
+                    "mt-5 text-[18px]",
+                    "mt-3.5 text-[14px]",
+                  )}`}
+                >
+                  {verdict.reason}
+                </p>
+                <div
+                  className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-ink-faint ${s(
+                    "text-[12px]",
+                    "text-[9px]",
+                  )}`}
+                >
+                  <span>Checked {reading ? clockTime(reading.fetchedAt) : "just now"}</span>
+                  <span>·</span>
+                  <span>{reading?.demo ? "Demo data, not live" : "Live sources"}</span>
+                  {aqi === null && <span>· No current AQI value for this place yet</span>}
+                </div>
 
-              {verdict.blind_spots.length > 0 && (
-                <div className="mt-4 border-t border-border pt-3">
-                  <div className="text-[10px] uppercase tracking-[0.1em] text-ink-faint">
-                    Disclosed gaps
-                  </div>
-                  <ul className="mt-1.5 max-w-[620px] space-y-1">
-                    {verdict.blind_spots.slice(0, 2).map((spot) => (
-                      <li
-                        key={spot}
-                        className="flex gap-1.5 text-[12px] leading-[1.4] text-ink-soft"
-                      >
-                        <span className="mt-1.5 size-1 shrink-0 rounded-full bg-ink-faint" />
-                        <span className="line-clamp-2">{spot}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {verdict.blind_spots.length > 2 && (
-                    <div className="mt-1 text-[11px] text-ink-faint">
-                      +{verdict.blind_spots.length - 2} more disclosed gaps
+                {verdict.blind_spots.length > 0 && (
+                  <div className={`border-t border-border ${s("mt-4 pt-3", "mt-3 pt-2.5")}`}>
+                    <div
+                      className={`uppercase tracking-[0.1em] text-ink-faint ${s(
+                        "text-[10px]",
+                        "text-[9px]",
+                      )}`}
+                    >
+                      Disclosed gaps
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Top Regions by AQI */}
-      <div
-        style={pos(888, lifted(898), 455, 392)}
-        className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6"}`}
-      >
-        <div className="flex items-center justify-between px-[22px] pt-[20px]">
-          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Top Regions by AQI</h3>
-        </div>
-        <div className="mt-[18px] flex justify-between px-[22px] text-[13px] text-ink-faint">
-          <span>{activeRegion || "Place"}</span>
-          <span>Live AQI</span>
-        </div>
-        <ul className="mt-[10px] px-[22px]">
-          {sortedRows === null ? (
-            <>
-              <li className="sr-only">Ranking live readings for this region…</li>
-              {Array.from({ length: 4 }).map((_, index) => (
-                <li
-                  key={index}
-                  className="flex h-[66px] items-center gap-4 border-t border-border text-[13px] text-ink-faint"
-                >
-                  <span className="h-3 w-28 animate-pulse rounded bg-canvas" />
-                  <span className="ml-auto h-3 w-12 animate-pulse rounded bg-canvas" />
-                </li>
-              ))}
+                    <ul className="mt-1.5 max-w-[620px] space-y-1">
+                      {verdict.blind_spots.slice(0, 2).map((spot) => (
+                        <li
+                          key={spot}
+                          className={`flex gap-1.5 leading-[1.4] text-ink-soft ${s(
+                            "text-[12px]",
+                            "text-[9px]",
+                          )}`}
+                        >
+                          <span className="mt-1.5 size-1 shrink-0 rounded-full bg-ink-faint" />
+                          <span className="line-clamp-2">{spot}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {verdict.blind_spots.length > 2 && (
+                      <div className={`mt-1 text-ink-faint ${s("text-[11px]", "text-[9px]")}`}>
+                        +{verdict.blind_spots.length - 2} more disclosed gaps
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </>
-          ) : sortedRows.length === 0 ? (
-            <li className="flex h-[140px] items-center border-t border-border text-[14px] text-ink-soft">
-              {activeRegion
-                ? "No live readings for this region yet."
-                : "Pick a region above to rank its countries."}
-            </li>
-          ) : (
-            sortedRows.map((row) => (
-              <li
-                key={row.name}
-                className="grid h-[66px] grid-cols-[1fr_auto_1fr] items-center border-t border-border"
-              >
-                <span className="truncate pr-2 text-[18px] text-ink">{row.name}</span>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[13px] ${LEVEL_CHIP[row.level] ?? "bg-canvas text-ink-soft"}`}
-                >
-                  {row.level || "no data"}
-                </span>
-                <span className="text-right text-[16px] text-ink">
-                  {row.aqi === null ? "—" : Math.round(row.aqi)}
-                  <span className="text-[13px] text-ink-soft">/300</span>
-                </span>
-              </li>
-            ))
           )}
-        </ul>
-      </div>
+        </div>
 
-      {/* Where This Comes From */}
-      <div
-        style={pos(1355, lifted(898), 533, 392)}
-        className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6"}`}
-      >
-        <div className="flex items-center justify-between px-[21px] pt-[22px]">
-          <h3 className="text-[21px] tracking-[-0.01em] text-ink">Where This Comes From</h3>
-          <span className="text-[13px] text-ink-faint">
-            {evidence.length} {evidence.length === 1 ? "reading" : "readings"}
-          </span>
-        </div>
-        <ul className="mt-4 min-h-0 px-[21px]">
-          {status === "loading" || status === "idle" ? (
-            <li className="flex h-[120px] items-center text-[14px] text-ink-faint">
-              Loading sources…
-            </li>
-          ) : sources.length === 0 ? (
-            <li className="flex h-[120px] items-center text-[14px] text-ink-soft">
-              No sources answered.
-            </li>
-          ) : (
-            sources.slice(0, 5).map((source) => (
+        {/* Top Regions by AQI */}
+        <div
+          style={pos(888, lifted(898), 455, 392)}
+          className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6"}`}
+        >
+          <div
+            className={`flex items-center justify-between ${s(
+              "px-[22px] pt-[20px]",
+              "px-4 pt-3.5",
+            )}`}
+          >
+            <h3 className={`tracking-[-0.01em] text-ink ${s("text-[21px]", "text-[17px]")}`}>
+              Top Regions by AQI
+            </h3>
+          </div>
+          <div
+            className={`flex justify-between text-ink-faint ${s(
+              "mt-[18px] px-[22px] text-[13px]",
+              "mt-2.5 px-4 text-[10px]",
+            )}`}
+          >
+            <span>{activeRegion || "Place"}</span>
+            <span>Live AQI</span>
+          </div>
+          <ul className={s("mt-[10px] px-[22px]", "mt-1.5 px-4")}>
+            {sortedRows === null ? (
+              <>
+                <li className="sr-only">Ranking live readings for this region…</li>
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <li
+                    key={index}
+                    className={`flex items-center gap-4 border-t border-border text-ink-faint ${s(
+                      "h-[66px] text-[13px]",
+                      "h-[50px] text-[10px]",
+                    )}`}
+                  >
+                    <span className="h-3 w-28 animate-pulse rounded bg-canvas" />
+                    <span className="ml-auto h-3 w-12 animate-pulse rounded bg-canvas" />
+                  </li>
+                ))}
+              </>
+            ) : sortedRows.length === 0 ? (
               <li
-                key={source.name}
-                className="flex items-center justify-between gap-3 border-t border-border py-2.5 first:border-t-0"
+                className={`flex items-center border-t border-border text-ink-soft ${s(
+                  "h-[140px] text-[14px]",
+                  "h-[104px] text-[11px]",
+                )}`}
               >
-                <span className="truncate text-[15px] text-ink">{source.name}</span>
-                <span className="shrink-0 text-[12px] text-ink-faint">
-                  {source.count} read{source.count === 1 ? "" : "s"}
-                  {source.stale > 0 && ` · ${source.stale} stale`}
-                </span>
+                {activeRegion
+                  ? "No live readings for this region yet."
+                  : "Pick a region above to rank its countries."}
               </li>
-            ))
-          )}
-        </ul>
-        <div className="mt-[18px] flex flex-wrap gap-[26px] px-[21px] text-[13px] text-ink">
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-full bg-risk-green" /> Fresh
-            <span className="ml-1 text-[16px] text-risk-green">{fresh}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="size-2 rounded-full bg-risk-orange" /> Stale
-            <span className="ml-1 text-[16px] text-risk-orange">{evidence.length - fresh}</span>
-          </span>
+            ) : (
+              sortedRows.map((row) => (
+                <li
+                  key={row.name}
+                  className={`grid grid-cols-[1fr_auto_1fr] items-center border-t border-border ${s(
+                    "h-[66px]",
+                    "h-[50px]",
+                  )}`}
+                >
+                  <span className={`truncate pr-2 text-ink ${s("text-[18px]", "text-[14px]")}`}>
+                    {row.name}
+                  </span>
+                  <span
+                    className={`rounded-full ${s(
+                      "px-2.5 py-1 text-[13px]",
+                      "px-2 py-0.5 text-[10px]",
+                    )} ${LEVEL_CHIP[row.level] ?? "bg-canvas text-ink-soft"}`}
+                  >
+                    {row.level || "no data"}
+                  </span>
+                  <span className={`text-right text-ink ${s("text-[16px]", "text-[13px]")}`}>
+                    {row.aqi === null ? "—" : Math.round(row.aqi)}
+                    <span className={`text-ink-soft ${s("text-[13px]", "text-[10px]")}`}>/300</span>
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
         </div>
-        <p className="mt-[14px] px-[21px] text-[11px] leading-[1.5] text-ink-faint">
-          Latest observation {timeAgo(latestObservation ?? null)}. Stale readings are down-weighted,
-          never hidden.
-        </p>
+
+        {/* Where This Comes From */}
+        <div
+          style={pos(1355, lifted(898), 533, 392)}
+          className={`rounded-[18px] bg-surface ${desktop ? "" : "mt-6"}`}
+        >
+          <div
+            className={`flex items-center justify-between ${s("px-[21px] pt-[22px]", "px-4 pt-4")}`}
+          >
+            <h3 className={`tracking-[-0.01em] text-ink ${s("text-[21px]", "text-[17px]")}`}>
+              Where This Comes From
+            </h3>
+            <span className={`text-ink-faint ${s("text-[13px]", "text-[10px]")}`}>
+              {evidence.length} {evidence.length === 1 ? "reading" : "readings"}
+            </span>
+          </div>
+          <ul className={`min-h-0 ${s("mt-4 px-[21px]", "mt-2.5 px-4")}`}>
+            {status === "loading" || status === "idle" ? (
+              <li
+                className={`flex items-center text-ink-faint ${s(
+                  "h-[120px] text-[14px]",
+                  "h-[96px] text-[11px]",
+                )}`}
+              >
+                Loading sources…
+              </li>
+            ) : sources.length === 0 ? (
+              <li
+                className={`flex items-center text-ink-soft ${s(
+                  "h-[120px] text-[14px]",
+                  "h-[96px] text-[11px]",
+                )}`}
+              >
+                No sources answered.
+              </li>
+            ) : (
+              sources.slice(0, 5).map((source) => (
+                <li
+                  key={source.name}
+                  className={`flex items-center justify-between gap-3 border-t border-border first:border-t-0 ${s(
+                    "py-2.5",
+                    "py-1.5",
+                  )}`}
+                >
+                  <span className={`truncate text-ink ${s("text-[15px]", "text-[12px]")}`}>
+                    {source.name}
+                  </span>
+                  <span className={`shrink-0 text-ink-faint ${s("text-[12px]", "text-[9px]")}`}>
+                    {source.count} read{source.count === 1 ? "" : "s"}
+                    {source.stale > 0 && ` · ${source.stale} stale`}
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
+          <div
+            className={`flex flex-wrap text-ink ${s(
+              "mt-[18px] gap-[26px] px-[21px] text-[13px]",
+              "mt-2.5 gap-4 px-4 text-[10px]",
+            )}`}
+          >
+            <span className="flex items-center gap-1">
+              <span className="size-2 rounded-full bg-risk-green" /> Fresh
+              <span className={`ml-1 text-risk-green ${s("text-[16px]", "text-[13px]")}`}>
+                {fresh}
+              </span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-2 rounded-full bg-risk-orange" /> Stale
+              <span className={`ml-1 text-risk-orange ${s("text-[16px]", "text-[13px]")}`}>
+                {evidence.length - fresh}
+              </span>
+            </span>
+          </div>
+          <p
+            className={`leading-[1.5] text-ink-faint ${s(
+              "mt-[14px] px-[21px] text-[11px]",
+              "mt-2.5 px-4 text-[9px]",
+            )}`}
+          >
+            Latest observation {timeAgo(latestObservation ?? null)}. Stale readings are
+            down-weighted, never hidden.
+          </p>
+        </div>
       </div>
     </>
   );

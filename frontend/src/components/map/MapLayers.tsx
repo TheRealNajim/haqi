@@ -30,11 +30,7 @@ function heightAtField(field: HeightField, lon: number, lat: number) {
   return (sampleElevation(field, lon, lat) / MAX_ELEVATION) ** 1.35 * 9;
 }
 
-function ringSegments(
-  states: StateRecord[],
-  field: HeightField,
-  lift: number,
-): Float32Array {
+function ringSegments(states: StateRecord[], field: HeightField, lift: number): Float32Array {
   const positions: number[] = [];
   for (const state of states) {
     for (const ring of state.rings) {
@@ -64,7 +60,10 @@ export function StateBorders({
 }) {
   const geometry = useMemo(() => {
     const result = new THREE.BufferGeometry();
-    result.setAttribute("position", new THREE.BufferAttribute(ringSegments(states, field, 0.035), 3));
+    result.setAttribute(
+      "position",
+      new THREE.BufferAttribute(ringSegments(states, field, 0.035), 3),
+    );
     return result;
   }, [states, field]);
 
@@ -87,12 +86,7 @@ export function StateBorders({
   return (
     <>
       <lineSegments geometry={geometry} renderOrder={2}>
-        <lineBasicMaterial
-          color="#4a463c"
-          transparent
-          opacity={0.34}
-          depthWrite={false}
-        />
+        <lineBasicMaterial color="#4a463c" transparent opacity={0.34} depthWrite={false} />
       </lineSegments>
       {highlightGeometry && (
         <lineSegments geometry={highlightGeometry} renderOrder={3}>
@@ -114,12 +108,15 @@ export function HoverLabel({
   const point = lonLatToWorld(selection.lon, selection.lat);
   const height = heightAtField(field, selection.lon, selection.lat) + 0.55;
   return (
-    <Html position={[point.x, height, point.z]} center zIndexRange={[40, 10]} style={{ pointerEvents: "none" }}>
+    <Html
+      position={[point.x, height, point.z]}
+      center
+      zIndexRange={[40, 10]}
+      style={{ pointerEvents: "none" }}
+    >
       <div className="-translate-y-2 whitespace-nowrap rounded-full border border-border bg-surface/95 px-3 py-1 text-[12px] leading-none text-ink shadow-[var(--shadow-soft)]">
         {selection.name}
-        {selection.kind === "state" && (
-          <span className="ml-1.5 text-ink-faint">· Nigeria</span>
-        )}
+        {selection.kind === "state" && <span className="ml-1.5 text-ink-faint">· Nigeria</span>}
       </div>
     </Html>
   );
@@ -172,7 +169,8 @@ export function AirQualityLayer({
               <div className="flex -translate-y-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-surface/95 py-1 pl-2.5 pr-3 text-[12px] leading-none text-ink shadow-[var(--shadow-soft)]">
                 <span aria-hidden className={`size-2 rounded-full ${dot}`} />
                 <span className={`font-medium ${LEVEL_TEXT[marker.level] ?? "text-ink"}`}>
-                  {marker.aqi === null ? "No value" : Math.round(marker.aqi)} · {marker.level || "no reading"}
+                  {marker.aqi === null ? "No value" : Math.round(marker.aqi)} ·{" "}
+                  {marker.level || "no reading"}
                 </span>
                 {marker.demo && <span className="text-ink-faint">demo</span>}
               </div>

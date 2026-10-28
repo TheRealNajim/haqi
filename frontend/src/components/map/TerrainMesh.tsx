@@ -152,10 +152,7 @@ export function TerrainMesh({
   const heightTexture = useMemo(() => toHeightTexture(data.height), [data]);
   const colourTexture = useMemo(() => toColourTexture(data.colours), [data]);
   const idTexture = useMemo(() => toIdTexture(data.ids), [data]);
-  const regionTexture = useMemo(
-    () => (region ? toHeightTexture(region.height) : null),
-    [region],
-  );
+  const regionTexture = useMemo(() => (region ? toHeightTexture(region.height) : null), [region]);
 
   useEffect(() => {
     return () => {

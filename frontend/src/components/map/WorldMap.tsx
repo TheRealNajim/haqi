@@ -98,47 +98,57 @@ export function WorldMap({
       className={`relative h-full w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/25 focus-visible:ring-inset ${className}`}
       style={{ backgroundColor: "#ffffff" }}
     >
-      {showCanvas && data ? (
-        <WorldMapCanvas
-          data={data}
-          region={null}
-          states={null}
-          background="#ffffff"
-          selected={selected}
-          markers={markers}
-          overlay={overlay}
-          focusZoom={focusZoom}
-          reducedMotion={reducedMotion}
-          quality="high"
-          zoom={null}
-          onPick={handleSelect}
-        />
-      ) : null}
+      <div className={`absolute inset-0 ${immersive ? "map-launch" : ""}`}>
+        {showCanvas && data ? (
+          <WorldMapCanvas
+            data={data}
+            region={null}
+            states={null}
+            background="#ffffff"
+            selected={selected}
+            markers={markers}
+            overlay={overlay}
+            focusZoom={focusZoom}
+            reducedMotion={reducedMotion}
+            quality="high"
+            zoom={null}
+            interactive={immersive}
+            onPick={handleSelect}
+          />
+        ) : null}
+
+        {(webgl === false || error) && (
+          <div className="absolute inset-0">
+            <img
+              src={worldMap}
+              alt="Relief map of the world"
+              className="absolute inset-0 h-full w-full scale-[1.08] object-cover"
+            />
+          </div>
+        )}
+      </div>
 
       {/* Loading / failure surfaces */}
-      {webgl === null && <span className="absolute inset-0 flex items-center justify-center text-ink-soft">Checking this browser's 3D support…</span>}
-      {webgl === true && !data && !error && (
-        <span className="absolute inset-0 flex items-center justify-center text-ink-soft">Sculpting the relief map…</span>
+      {webgl === null && (
+        <span className="absolute inset-0 flex items-center justify-center text-ink-soft">
+          Checking this browser's 3D support…
+        </span>
       )}
-      {(webgl === false || error) && (
-        <div className="absolute inset-0">
-          <img
-            src={worldMap}
-            alt="Relief map of the world"
-            className="absolute inset-0 h-full w-full scale-[1.08] object-cover"
-          />
-          {error && (
-            <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-[10px] border border-border bg-surface/95 px-4 py-3 text-[13px] text-ink shadow-[var(--shadow-soft)]">
-              <span>The 3D map could not load.</span>
-              <button
-                type="button"
-                onClick={() => setAttempt((value) => value + 1)}
-                className="rounded-full border border-border px-3 py-1 text-[12px] hover:bg-canvas"
-              >
-                Try again
-              </button>
-            </div>
-          )}
+      {webgl === true && !data && !error && (
+        <span className="absolute inset-0 flex items-center justify-center text-ink-soft">
+          Sculpting the relief map…
+        </span>
+      )}
+      {error && (
+        <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-[10px] border border-border bg-surface/95 px-4 py-3 text-[13px] text-ink shadow-[var(--shadow-soft)]">
+          <span>The 3D map could not load.</span>
+          <button
+            type="button"
+            onClick={() => setAttempt((value) => value + 1)}
+            className="rounded-full border border-border px-3 py-1 text-[12px] hover:bg-canvas"
+          >
+            Try again
+          </button>
         </div>
       )}
 
@@ -148,9 +158,14 @@ export function WorldMap({
           type="button"
           onClick={() => onImmersiveChange?.(false)}
           aria-label="Exit full map"
-          className="absolute right-4 top-4 z-50 flex size-11 items-center justify-center rounded-full border border-border bg-surface text-ink shadow-[var(--shadow-soft)] transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 sm:right-6 sm:top-6"
+          title="Exit full map"
+          className="absolute z-50 flex size-12 items-center justify-center rounded-full border border-border bg-surface/95 text-ink shadow-[var(--shadow-soft)] backdrop-blur transition-colors hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+          style={{
+            top: "max(1rem, env(safe-area-inset-top))",
+            right: "max(1rem, env(safe-area-inset-right))",
+          }}
         >
-          <X className="size-5" strokeWidth={1.7} />
+          <X className="size-5" strokeWidth={1.8} />
         </button>
       )}
     </section>
@@ -159,5 +174,7 @@ export function WorldMap({
 
 // Simplified status display
 function StatusText({ label }: { label: string }) {
-  return <span className="absolute inset-0 flex items-center justify-center text-ink-soft">{label}</span>;
+  return (
+    <span className="absolute inset-0 flex items-center justify-center text-ink-soft">{label}</span>
+  );
 }

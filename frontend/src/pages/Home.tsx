@@ -186,19 +186,6 @@ export function HomePage() {
     riskType: riskType || "All Risk Type",
   };
 
-  const header = (
-    <AppHeader
-      desktop={desktop}
-      query={query}
-      onQueryChange={setQuery}
-      filters={filterValues}
-      filterOptions={filterOptions}
-      disabledFilters={{ country: !region, area: !country }}
-      showFilters={desktop || screen === "today"}
-      onFilterChange={setFilter}
-    />
-  );
-
   const activeNav = NAV.findIndex((item) => item.screen === screen);
 
   const handleNavClick = (event: React.MouseEvent<HTMLAnchorElement>, next: Screen) => {
@@ -226,7 +213,11 @@ export function HomePage() {
           });
         }}
         onMouseLeave={() => setNavHover(null)}
-        style={desktop ? { left: 29 * K, top: (127 + index * 69) * K, width: 64 * K, height: 64 * K } : undefined}
+        style={
+          desktop
+            ? { left: 29 * K, top: (127 + index * 69) * K, width: 64 * K, height: 64 * K }
+            : undefined
+        }
         className={
           desktop
             ? "absolute z-20 flex cursor-pointer items-center justify-center rounded-[10px] bg-surface text-ink"
@@ -247,6 +238,25 @@ export function HomePage() {
       </a>
     );
   };
+
+  const header = (
+    <AppHeader
+      desktop={desktop}
+      query={query}
+      onQueryChange={setQuery}
+      filters={filterValues}
+      filterOptions={filterOptions}
+      disabledFilters={{ country: !region, area: !country }}
+      showFilters={desktop || screen === "today"}
+      onFilterChange={setFilter}
+      screen={screen}
+      mobileNav={
+        <nav aria-label="Screens" className="flex gap-2">
+          {NAV.map((item, index) => navLink(item, index))}
+        </nav>
+      }
+    />
+  );
 
   const sidebar = desktop ? (
     <>
@@ -271,9 +281,7 @@ export function HomePage() {
     <div ref={wrapRef} className="relative min-h-screen w-full bg-white">
       <div
         className={`fixed inset-0 overflow-hidden ${
-          immersive
-            ? "map-launch pointer-events-auto z-50"
-            : "pointer-events-none z-0"
+          immersive ? "pointer-events-auto z-50" : "pointer-events-none z-0"
         }`}
       >
         <WorldMap
@@ -333,9 +341,6 @@ export function HomePage() {
       ) : (
         <div className="relative z-10 min-h-screen overflow-hidden px-4 py-6">
           <div className="relative z-10">{header}</div>
-          <nav aria-label="Screens" className="relative z-10 mt-4 flex gap-2">
-            {NAV.map((item, index) => navLink(item, index))}
-          </nav>
           <div
             className={`relative z-10 transition-opacity duration-700 ${immersive ? "opacity-0" : "opacity-100"} ${screen === "today" ? "screen-in" : "hidden"}`}
             aria-hidden={screen !== "today"}
@@ -359,7 +364,11 @@ export function HomePage() {
             aria-hidden={screen !== "ask"}
             inert={screen !== "ask"}
           >
-            <AskPage desktop={false} onViewFullMap={openImmersive} onViewWhy={() => navigate("why")} />
+            <AskPage
+              desktop={false}
+              onViewFullMap={openImmersive}
+              onViewWhy={() => navigate("why")}
+            />
           </div>
           <div
             className={`relative z-10 transition-opacity duration-700 ${immersive ? "opacity-0" : "opacity-100"} ${screen === "why" ? "screen-in" : "hidden"}`}
@@ -370,7 +379,6 @@ export function HomePage() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

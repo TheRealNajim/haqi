@@ -13,11 +13,9 @@ import {
 const TILT = 0.16;
 const MIN_DISTANCE = 6.5;
 
-const easeInOutCubic = (t: number) =>
-  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 type Frame = { target: THREE.Vector3; distance: number };
 
@@ -26,15 +24,19 @@ export function MapCamera({
   reducedMotion,
   zoom,
   focusZoom = 1,
+  interactive = true,
 }: {
   selection: MapSelection | null;
   reducedMotion: boolean;
   zoom: { direction: -1 | 1; token: number } | null;
   focusZoom?: number;
+  /** When false the map is a still background plate and ignores input. */
+  interactive?: boolean;
 }) {
   const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera;
   const size = useThree((state) => state.size);
   const invalidate = useThree((state) => state.invalidate);
+  const gl = useThree((state) => state.gl);
   const controls = useRef<import("three-stdlib").MapControls | null>(null);
   const animation = useRef<{
     fromTarget: THREE.Vector3;
@@ -44,7 +46,6 @@ export function MapCamera({
     start: number;
     duration: number;
   } | null>(null);
-
 
   const fitDistance = (viewWidth: number, viewHeight: number) => {
     const vFov = THREE.MathUtils.degToRad(camera.fov);
@@ -114,6 +115,49 @@ export function MapCamera({
     }
   };
 
+  // Leaving full screen hands the map back as a plain background plate:
+  // drop the camera back to the full-world cover instead of keeping whatever
+  // zoom/pan the user explored with.
+  const wasInteractive = useRef(interactive);
+  useEffect(() => {
+    if (wasInteractive.current && !interactive) {
+      animation.current = null;
+      const control = controls.current;
+      const target = new THREE.Vector3(0, 0, 0);
+      const distance = clamp(
+        fillDistance(MAP_LAYOUT.worldWidth, WORLD_DEPTH) * 0.9,
+        MIN_DISTANCE,
+        200,
+      );
+      camera.position.copy(positionFor(target, distance));
+      camera.lookAt(target);
+      camera.updateProjectionMatrix();
+      if (control) {
+        control.target.copy(target);
+        control.update();
+      }
+      invalidate();
+    }
+    wasInteractive.current = interactive;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive, camera, invalidate]);
+
+  // Touching the map must immediately take over from an in-flight framing
+  // move; otherwise the first drag or pinch is swallowed for up to 900ms.
+  useEffect(() => {
+    if (!interactive) return;
+    const element = gl.domElement;
+    const takeOver = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (!animation.current) return;
+      animation.current = null;
+      if (controls.current) controls.current.enabled = true;
+      invalidate();
+    };
+    element.addEventListener("pointerdown", takeOver, { capture: true });
+    return () => element.removeEventListener("pointerdown", takeOver, { capture: true });
+  }, [gl, interactive, invalidate]);
+
   useEffect(() => {
     const frame = framing();
     const control = controls.current;
@@ -148,7 +192,16 @@ export function MapCamera({
     raf = requestAnimationFrame(pump);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selection?.id, selection?.kind, camera, invalidate, reducedMotion, size.width, size.height, focusZoom]);
+  }, [
+    selection?.id,
+    selection?.kind,
+    camera,
+    invalidate,
+    reducedMotion,
+    size.width,
+    size.height,
+    focusZoom,
+  ]);
 
   useEffect(() => {
     if (!zoom) return;
@@ -156,11 +209,7 @@ export function MapCamera({
     if (!control) return;
 
     const current = camera.position.distanceTo(control.target);
-    const next = clamp(
-      current * (zoom.direction > 0 ? 0.72 : 1.38),
-      MIN_DISTANCE,
-      200,
-    );
+    const next = clamp(current * (zoom.direction > 0 ? 0.72 : 1.38), MIN_DISTANCE, 200);
     const target = control.target.clone();
     control.enabled = false;
     animation.current = {
@@ -189,9 +238,8 @@ export function MapCamera({
     const active = animation.current;
 
     if (active) {
-      const t = active.duration > 0
-        ? clamp((performance.now() - active.start) / active.duration, 0, 1)
-        : 1;
+      const t =
+        active.duration > 0 ? clamp((performance.now() - active.start) / active.duration, 0, 1) : 1;
       const eased = easeInOutCubic(t);
       const target = active.fromTarget.clone().lerp(active.toTarget, eased);
       const position = active.fromPosition.clone().lerp(active.toPosition, eased);
@@ -219,22 +267,21 @@ export function MapCamera({
       -MAP_LAYOUT.worldWidth / 2 + 1,
       MAP_LAYOUT.worldWidth / 2 - 1,
     );
-    control.target.z = clamp(
-      control.target.z,
-      -WORLD_DEPTH / 2 + 1,
-      WORLD_DEPTH / 2 - 1,
-    );
+    control.target.z = clamp(control.target.z, -WORLD_DEPTH / 2 + 1, WORLD_DEPTH / 2 - 1);
   });
 
   return (
     <MapControls
       ref={controls}
       makeDefault
+      enabled={interactive}
       enableRotate={false}
       enableDamping
       dampingFactor={0.085}
-      panSpeed={0.9}
-      zoomSpeed={0.9}
+      panSpeed={1.15}
+      zoomSpeed={1}
+      // One finger pans, two fingers pinch to zoom *and* pan together.
+      touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }}
       minDistance={MIN_DISTANCE}
       maxDistance={200}
       onStart={() => {

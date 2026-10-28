@@ -26,8 +26,7 @@ export const MAP_LAYOUT = {
 } as const;
 
 export const LAT_SPAN = MAP_LAYOUT.latTop - MAP_LAYOUT.latBottom;
-export const WORLD_DEPTH =
-  MAP_LAYOUT.worldWidth * (LAT_SPAN / 360) * MAP_LAYOUT.verticalStretch;
+export const WORLD_DEPTH = MAP_LAYOUT.worldWidth * (LAT_SPAN / 360) * MAP_LAYOUT.verticalStretch;
 
 /** Relief is stored in metres; the pipeline clamps ocean to 0. */
 export const MAX_ELEVATION = 9000;
@@ -245,7 +244,11 @@ export function loadMapData(): Promise<MapData> {
       const byId = new Map(countries.map((country) => [country.id, country]));
       return {
         height: toHeightField(height),
-        colours: { data: new Uint8Array(colour.data.buffer.slice(0)), width: colour.width, height: colour.height },
+        colours: {
+          data: new Uint8Array(colour.data.buffer.slice(0)),
+          width: colour.width,
+          height: colour.height,
+        },
         ids: { data: toRgba(ids), width: ids.width, height: ids.height },
         countries,
         byId,
@@ -266,9 +269,10 @@ export function loadRegionData(): Promise<RegionData> {
 
   regionPromise = Promise.all([
     loadImageData("nigeria-height.png"),
-    loadJson<{ label: string; bbox: { minLon: number; maxLon: number; minLat: number; maxLat: number } }>(
-      "region.json",
-    ),
+    loadJson<{
+      label: string;
+      bbox: { minLon: number; maxLon: number; minLat: number; maxLat: number };
+    }>("region.json"),
   ])
     .then(([height, meta]) => ({
       height: toHeightField(height),
@@ -303,7 +307,13 @@ export function toHeightTexture(field: HeightField): THREE.DataTexture {
   for (let i = 0; i < field.data.length; i += 1) {
     half[i] = THREE.DataUtils.toHalfFloat(field.data[i] ?? 0);
   }
-  const texture = new THREE.DataTexture(half, field.width, field.height, THREE.RedFormat, THREE.HalfFloatType);
+  const texture = new THREE.DataTexture(
+    half,
+    field.width,
+    field.height,
+    THREE.RedFormat,
+    THREE.HalfFloatType,
+  );
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
   texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -313,7 +323,11 @@ export function toHeightTexture(field: HeightField): THREE.DataTexture {
   return texture;
 }
 
-export function toColourTexture(source: { data: Uint8Array; width: number; height: number }): THREE.DataTexture {
+export function toColourTexture(source: {
+  data: Uint8Array;
+  width: number;
+  height: number;
+}): THREE.DataTexture {
   const texture = new THREE.DataTexture(
     source.data,
     source.width,
@@ -330,7 +344,11 @@ export function toColourTexture(source: { data: Uint8Array; width: number; heigh
   return texture;
 }
 
-export function toIdTexture(source: { data: Uint8Array; width: number; height: number }): THREE.DataTexture {
+export function toIdTexture(source: {
+  data: Uint8Array;
+  width: number;
+  height: number;
+}): THREE.DataTexture {
   const texture = new THREE.DataTexture(
     source.data,
     source.width,

@@ -422,20 +422,12 @@ async function buildCountries() {
       continent: props.CONTINENT ?? "",
       lat: Number(props.LABEL_Y ?? props.LATITUDE ?? 0),
       lon: Number(props.LABEL_X ?? props.LONGITUDE ?? 0),
-      bbox: [
-        item.bounds.minLon,
-        item.bounds.minLat,
-        item.bounds.maxLon,
-        item.bounds.maxLat,
-      ],
+      bbox: [item.bounds.minLon, item.bounds.minLat, item.bounds.maxLon, item.bounds.maxLat],
     });
   });
 
   await writeFile(path.join(OUT, "country-ids.png"), encodePng(WIDTH, HEIGHT, idsToRgba(ids)));
-  await writeFile(
-    path.join(OUT, "terrain-color.png"),
-    encodePng(WIDTH / 2, HEIGHT / 2, colours),
-  );
+  await writeFile(path.join(OUT, "terrain-color.png"), encodePng(WIDTH / 2, HEIGHT / 2, colours));
   await writeFile(path.join(OUT, "countries.json"), JSON.stringify({ countries }));
   console.log(`countries: ${countries.length} rasterised`);
 }
@@ -505,7 +497,10 @@ async function buildNigeriaStates() {
       );
       const center = largest
         ? largest.reduce(
-            (acc, [lon, lat], _index, list) => [acc[0] + lon / list.length, acc[1] + lat / list.length],
+            (acc, [lon, lat], _index, list) => [
+              acc[0] + lon / list.length,
+              acc[1] + lat / list.length,
+            ],
             [0, 0],
           )
         : [0, 0];

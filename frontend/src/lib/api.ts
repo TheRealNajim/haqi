@@ -118,11 +118,7 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 25_0
         response.status === 502
           ? "We couldn't get the latest air-quality data. Please check your internet connection and try again."
           : failure?.error?.trim() || `The service answered ${response.status}.`;
-      throw new ApiError(
-        message,
-        response.status,
-        failure?.fallback ?? null,
-      );
+      throw new ApiError(message, response.status, failure?.fallback ?? null);
     }
 
     if (body === null) {

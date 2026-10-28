@@ -66,11 +66,13 @@ function stateAt(states: StateRecord[] | null, lon: number, lat: number): StateR
 export function MapInteraction({
   data,
   states,
+  interactive = true,
   onHover,
   onPick,
 }: {
   data: MapData;
   states: StateRecord[] | null;
+  interactive?: boolean;
   onHover: (selection: MapSelection | null) => void;
   onPick: (selection: MapSelection | null) => void;
 }) {
@@ -84,10 +86,15 @@ export function MapInteraction({
   const lastKey = useRef<string>("");
 
   useEffect(() => {
+    if (!interactive) return;
     const element = gl.domElement;
     const pointer = new THREE.Vector2();
     let downAt: { x: number; y: number } | null = null;
     let frame = 0;
+    // A pinch is not a tap: track every finger so the last finger to lift
+    // cannot select a country and yank the camera away from the gesture.
+    const activePointers = new Set<number>();
+    let multiTouch = false;
 
     const resolve = (event: PointerEvent): MapSelection | null => {
       const rect = element.getBoundingClientRect();
@@ -121,6 +128,7 @@ export function MapInteraction({
     };
 
     const onPointerMove = (event: PointerEvent) => {
+      if (activePointers.size > 1) return;
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
@@ -136,22 +144,34 @@ export function MapInteraction({
     };
 
     const onPointerDown = (event: PointerEvent) => {
+      activePointers.add(event.pointerId);
+      if (activePointers.size > 1) multiTouch = true;
       downAt = { x: event.clientX, y: event.clientY };
     };
 
     const onPointerUp = (event: PointerEvent) => {
+      activePointers.delete(event.pointerId);
+      const wasMultiTouch = multiTouch;
+      if (activePointers.size === 0) multiTouch = false;
       if (!downAt) return;
       const moved = Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y);
       downAt = null;
-      if (moved > 7 || event.button !== 0) return;
+      if (wasMultiTouch || moved > 7 || event.button !== 0) return;
       const selection = resolve(event);
       onPick(selection);
+    };
+
+    const onPointerCancel = (event: PointerEvent) => {
+      activePointers.delete(event.pointerId);
+      if (activePointers.size === 0) multiTouch = false;
+      downAt = null;
     };
 
     element.addEventListener("pointermove", onPointerMove);
     element.addEventListener("pointerleave", onPointerLeave);
     element.addEventListener("pointerdown", onPointerDown);
     element.addEventListener("pointerup", onPointerUp);
+    element.addEventListener("pointercancel", onPointerCancel);
     element.style.touchAction = "none";
 
     return () => {
@@ -160,8 +180,9 @@ export function MapInteraction({
       element.removeEventListener("pointerleave", onPointerLeave);
       element.removeEventListener("pointerdown", onPointerDown);
       element.removeEventListener("pointerup", onPointerUp);
+      element.removeEventListener("pointercancel", onPointerCancel);
     };
-  }, [camera, data, gl, invalidate, onHover, onPick, plane, point, raycaster, states]);
+  }, [camera, data, gl, interactive, invalidate, onHover, onPick, plane, point, raycaster, states]);
 
   return null;
 }

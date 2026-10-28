@@ -156,11 +156,20 @@ export function AppHeader({
         desktop ? "" : "size-10 shrink-0"
       }`}
     >
-      {dark ? (
-        <Moon className="size-5" strokeWidth={1.4} />
-      ) : (
-        <Sun className="size-5" strokeWidth={1.4} />
-      )}
+      <span aria-hidden="true" className="grid size-5 place-items-center">
+        <Sun
+          className={`col-start-1 row-start-1 size-5 transition-[rotate,scale,opacity] duration-300 ease-out motion-reduce:transition-none ${
+            dark ? "rotate-90 scale-50 opacity-0" : "rotate-0 scale-100 opacity-100"
+          }`}
+          strokeWidth={1.4}
+        />
+        <Moon
+          className={`col-start-1 row-start-1 size-5 transition-[rotate,scale,opacity] duration-300 ease-out motion-reduce:transition-none ${
+            dark ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-50 opacity-0"
+          }`}
+          strokeWidth={1.4}
+        />
+      </span>
     </button>
   );
 

@@ -160,23 +160,31 @@ export function WhyPage({ desktop, onViewFullMap }: WhyPageProps) {
 
   return (
     <div className={desktop ? "contents" : "relative"}>
-      <div
-        style={desktop ? pos(true, 119, 137, 1040, 96) : undefined}
-        className={desktop ? "" : "mt-6"}
-      >
-        <h1 className="font-display text-[42px] leading-[1.2] tracking-[-0.01em] text-ink">Why?</h1>
-      </div>
+      <div className={desktop ? "contents" : "mt-6 flex items-center justify-between gap-3"}>
+        <div
+          style={desktop ? pos(true, 119, 137, 1040, 96) : undefined}
+          className={desktop ? "" : "min-w-0"}
+        >
+          <h1
+            className={`font-display leading-[1.2] tracking-[-0.01em] text-black ${
+              desktop ? "text-[42px]" : "text-[30px]"
+            }`}
+          >
+            Why?
+          </h1>
+        </div>
 
-      <button
-        type="button"
-        onClick={onViewFullMap}
-        style={desktop ? pos(true, 1729, 141, 160, 48) : undefined}
-        className={`flex shrink-0 items-center justify-center gap-2 rounded-[10px] bg-ink text-[16px] text-surface transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
-          desktop ? "" : "mt-4 h-10 px-5"
-        }`}
-      >
-        View Full Map <Eye className="size-5" strokeWidth={1.6} />
-      </button>
+        <button
+          type="button"
+          onClick={onViewFullMap}
+          style={desktop ? pos(true, 1729, 141, 160, 48) : undefined}
+          className={`flex shrink-0 items-center justify-center gap-2 rounded-[10px] bg-ink text-surface transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            desktop ? "text-[16px]" : "h-8 px-3 text-[12px]"
+          }`}
+        >
+          View Full Map <Eye className={desktop ? "size-5" : "size-4"} strokeWidth={1.6} />
+        </button>
+      </div>
 
       <section
         style={desktop ? pos(true, 119, 250, 1060, 720) : undefined}

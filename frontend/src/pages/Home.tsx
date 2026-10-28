@@ -70,6 +70,7 @@ export function HomePage() {
   const [navHover, setNavHover] = useState<{ label: string; top: number } | null>(null);
   const [query, setQuery] = useState("");
   const [immersive, setImmersive] = useState(false);
+  const [headerScrolled, setHeaderScrolled] = useState(false);
   const [mapSelection, setMapSelection] = useState<MapSelection | null>(null);
   const { screen, navigate } = useRoute();
   const { reading } = useTodayReading(placeState.place, screen === "today");
@@ -90,6 +91,17 @@ export function HomePage() {
       window.removeEventListener("keydown", onKey);
     };
   }, [immersive, closeImmersive]);
+
+  /**
+   * The header stays pinned, so it only needs a backdrop once content has
+   * scrolled underneath it.
+   */
+  useEffect(() => {
+    const onScroll = () => setHeaderScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   /**
    * The map and the header filters share one idea of "the place you are looking
@@ -293,54 +305,81 @@ export function HomePage() {
         />
       </div>
       {desktop ? (
-        <div style={{ height: H * scale }} className="relative z-10 overflow-hidden">
-          <div
-            className="absolute left-0 top-0 origin-top-left overflow-hidden"
-            style={{ width: W, height: H, transform: `scale(${scale})` }}
-          >
+        <>
+          <div style={{ height: H * scale }} className="relative z-10 overflow-hidden">
             <div
-              className={screenLayer(screen === "today", immersive)}
-              aria-hidden={screen !== "today"}
-              inert={screen !== "today"}
+              className="absolute top-0 left-0 origin-top-left overflow-hidden"
+              style={{ width: W, height: H, transform: `scale(${scale})` }}
             >
-              <TodayPage
-                desktop
-                place={placeState.place}
-                placeStatus={placeState.status}
-                placeNote={placeState.note}
-                region={region}
-                country={country}
-                area={area}
-                active={screen === "today"}
-                lift={lift}
-                onUseMyLocation={useMyLocation}
-                onViewFullMap={openImmersive}
-              />
-            </div>
+              <div
+                className={screenLayer(screen === "today", immersive)}
+                aria-hidden={screen !== "today"}
+                inert={screen !== "today"}
+              >
+                <TodayPage
+                  desktop
+                  place={placeState.place}
+                  placeStatus={placeState.status}
+                  placeNote={placeState.note}
+                  region={region}
+                  country={country}
+                  area={area}
+                  active={screen === "today"}
+                  lift={lift}
+                  onUseMyLocation={useMyLocation}
+                  onViewFullMap={openImmersive}
+                />
+              </div>
 
-            <div
-              className={screenLayer(screen === "ask", immersive)}
-              aria-hidden={screen !== "ask"}
-              inert={screen !== "ask"}
-            >
-              <AskPage desktop onViewFullMap={openImmersive} onViewWhy={() => navigate("why")} />
-            </div>
+              <div
+                className={screenLayer(screen === "ask", immersive)}
+                aria-hidden={screen !== "ask"}
+                inert={screen !== "ask"}
+              >
+                <AskPage desktop onViewFullMap={openImmersive} onViewWhy={() => navigate("why")} />
+              </div>
 
-            <div
-              className={screenLayer(screen === "why", immersive)}
-              aria-hidden={screen !== "why"}
-              inert={screen !== "why"}
-            >
-              <WhyPage desktop onViewFullMap={openImmersive} />
-            </div>
+              <div
+                className={screenLayer(screen === "why", immersive)}
+                aria-hidden={screen !== "why"}
+                inert={screen !== "why"}
+              >
+                <WhyPage desktop onViewFullMap={openImmersive} />
+              </div>
 
-            {header}
-            {sidebar}
+              {sidebar}
+            </div>
           </div>
-        </div>
+          {/*
+            The header sits in its own fixed layer, outside the scrolling stage,
+            so it stays put while the page moves. It re-uses the design-space
+            scale so every control keeps its exact desktop position.
+          */}
+          <div className="pointer-events-none fixed inset-0 z-40">
+            <div
+              className="relative origin-top-left"
+              style={{ width: W, height: H, transform: `scale(${scale})` }}
+            >
+              <div
+                aria-hidden="true"
+                style={{ width: W, height: 96 * K }}
+                className={`absolute top-0 left-0 transition-colors duration-200 motion-reduce:transition-none ${
+                  headerScrolled ? "bg-surface/85 backdrop-blur-md" : ""
+                }`}
+              />
+              <div className="pointer-events-auto">{header}</div>
+            </div>
+          </div>
+        </>
       ) : (
-        <div className="relative z-10 min-h-screen overflow-hidden px-4 py-6">
-          <div className="relative z-10">{header}</div>
+        <div className="relative z-10 min-h-screen overflow-x-clip px-4 pb-6">
+          <div
+            className={`sticky top-0 z-30 -mx-4 px-4 pt-6 transition-colors duration-200 motion-reduce:transition-none ${
+              headerScrolled ? "bg-surface/85 backdrop-blur-md" : ""
+            }`}
+          >
+            {header}
+          </div>
           <div
             className={`relative z-10 transition-opacity duration-700 ${immersive ? "opacity-0" : "opacity-100"} ${screen === "today" ? "screen-in" : "hidden"}`}
             aria-hidden={screen !== "today"}
